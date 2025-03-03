@@ -1,366 +1,534 @@
-import h5py 
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.gridspec as gridspec
 
-##read the hd5 file####
-def read_hdf5_maya_data(file_path, data_group_name, parameter_indices=None, time_index=0):
+def read_hdf5_info(filename):
+    """Print detailed information about an HDF5 file structure."""
+    with h5py.File(filename, 'r') as f:
+        print(f"\nHDF5 File: {filename}")
+        print("=" * 50)
+        print("Root level groups/datasets:")
+        
+        def print_item(name, obj):
+            indent = "  " * name.count('/')
+            if isinstance(obj, h5py.Group):
+                print(f"{indent}Group: {name}")
+                # Print attributes
+                for key, val in obj.attrs.items():
+                    print(f"{indent}  Attr: {key} = {val}")
+            elif isinstance(obj, h5py.Dataset):
+                shape_str = str(obj.shape)
+                dtype_str = str(obj.dtype)
+                print(f"{indent}Dataset: {name}, Shape: {shape_str}, Type: {dtype_str}")
+                # Print attributes
+                for key, val in obj.attrs.items():
+                    print(f"{indent}  Attr: {key} = {val}")
+        
+        f.visititems(print_item)
+
+def read_compound_dataset(filename, dataset_path):
     """
-    Read data from HDF5 file following the Maya visualization structure.
+    Read a compound dataset from an HDF5 file correctly.
     
     Parameters:
     -----------
-    file_path : str
+    filename : str
         Path to the HDF5 file
-    data_group_name : str
-        Name of the data group to read (e.g., 'Bdot vectors', 'density')
-    parameter_indices : list or None
-        List of parameter indices [p1_idx, p2_idx, p3_idx, p4_idx] or None
-    time_index : int
-        Index of the timestep to read
+    dataset_path : str
+        Path to the dataset within the HDF5 file
         
     Returns:
     --------
-    data : ndarray
-        3D volume data at specified parameter indices and time
-    spatial_grid : ndarray
-        Spatial grid coordinates (x, y, z) for each data point
-    metadata : dict
-        Dictionary containing metadata about the dataset
+    data : dict
+        Dictionary with each field of the compound dataset
     """
-    with h5py.File(file_path, 'r') as f:
-        # Read spatial grid
-        spatial_grid = f['Spatial grid'][:]
+    with h5py.File(filename, 'r') as f:
+        if dataset_path not in f:
+            raise KeyError(f"Dataset path {dataset_path} not found in {filename}")
         
-        # Get metadata
-        metadata = {}
+        dataset = f[dataset_path]
         
-        # Check if data group exists
-        if data_group_name not in f:
-            raise ValueError(f"Data group '{data_group_name}' not found in file")
+        # Handle compound dataset
+        if not hasattr(dataset, 'dtype') or not dataset.dtype.names:
+            raise ValueError(f"Dataset {dataset_path} is not a compound dataset")
             
-        # Get data group attributes
-        group = f[data_group_name]
-        for attr in ['Name', 'Symbol', 'Units', 'Type']:
-            if attr in group.attrs:
-                metadata[attr.lower()] = group.attrs[attr]
-                
-        # Get timesteps
-        timesteps = group['Timesteps'][:]
-        if time_index >= len(timesteps):
-            raise ValueError(f"Time index {time_index} out of range (max: {len(timesteps)-1})")
-        metadata['timestep_value'] = timesteps[time_index]
+        # Get field names
+        field_names = dataset.dtype.names
         
-        # Determine parameter part of the dataset name
-        param_part = ""
-        if parameter_indices is not None:
-            # Check for parameters
-            param_names = []
-            param_values = []
+        # Create a dictionary to hold the data for each field
+        data = {}
+        
+        # Read the dataset field by field
+        for field in field_names:
+            # This correctly extracts a single field from the compound dataset
+            field_data = dataset[field][()]
+            data[field] = field_data
             
-            for i, param_idx in enumerate(parameter_indices):
-                param_name = f"Parameter{i+1}"
-                if param_name in f and param_idx is not None:
-                    param_dataset = f[param_name]
-                    if param_idx >= len(param_dataset):
-                        raise ValueError(f"Parameter index {param_idx} out of range for {param_name}")
-                    param_names.append(param_name)
-                    param_values.append(param_dataset[param_idx])
-                    param_part += f".{param_idx}"
-                    
-            metadata['parameters'] = dict(zip(param_names, param_values))
-        
-        # Construct dataset name
-        symbol = metadata.get('symbol', data_group_name)
-        dataset_name = f"{symbol}{param_part}"
-        
-        # Access dataset
-        if dataset_name not in group:
-            raise ValueError(f"Dataset '{dataset_name}' not found in group '{data_group_name}'")
-            
-        dataset = group[dataset_name]
-        
-        # Extract data for the specific time index
-        data = dataset[:, :, :, time_index]
-        
-    return data, spatial_grid, metadata
+        return data, dataset.shape
 
-def visualize_scalar_field(data, spatial_grid, title=None, colormap='viridis'):
+def visualize_field_components(data, field_names, shape, title=None, timestep=0):
     """
-    Visualize a 3D scalar field using slices.
+    Visualize components of vector field data.
     
     Parameters:
     -----------
-    data : ndarray
-        3D volume data (scalar field)
-    spatial_grid : ndarray
-        Spatial grid coordinates (x, y, z) for each data point
-    title : str or None
-        Plot title
-    colormap : str
-        Matplotlib colormap name
+    data : dict
+        Dictionary with field data
+    field_names : list
+        List of field names to visualize
+    shape : tuple
+        Shape of the dataset
+    title : str
+        Title for the plot
+    timestep : int
+        Timestep to visualize
     """
-    # Extract dimensions
-    nx, ny, nz = data.shape
-    
     # Create figure
-    fig = plt.figure(figsize=(18, 6))
-    
-    # Plot slices through the middle of the volume
-    mid_x = nx // 2
-    mid_y = ny // 2
-    mid_z = nz // 2
-    
-    # XY slice
-    ax1 = fig.add_subplot(131)
-    im1 = ax1.imshow(data[:, :, mid_z], cmap=colormap, origin='lower')
-    ax1.set_title(f'XY Slice (Z={mid_z})')
-    plt.colorbar(im1, ax=ax1)
-    
-    # XZ slice
-    ax2 = fig.add_subplot(132)
-    im2 = ax2.imshow(data[:, mid_y, :], cmap=colormap, origin='lower')
-    ax2.set_title(f'XZ Slice (Y={mid_y})')
-    plt.colorbar(im2, ax=ax2)
-    
-    # YZ slice
-    ax3 = fig.add_subplot(133)
-    im3 = ax3.imshow(data[mid_x, :, :], cmap=colormap, origin='lower')
-    ax3.set_title(f'YZ Slice (X={mid_x})')
-    plt.colorbar(im3, ax=ax3)
+    fig = plt.figure(figsize=(15, len(field_names) * 5))
     
     if title:
-        fig.suptitle(title, fontsize=16)
+        plt.suptitle(title, fontsize=16)
+    
+    # We assume the shape is (timesteps, z_positions, y, x)
+    n_timesteps, n_z, n_y, n_x = shape
+    
+    # For each field component
+    for i, field in enumerate(field_names):
+        field_data = data[field]
+        
+        # Create a row of plots for each z position at the given timestep
+        for z in range(min(n_z, 4)):  # Limit to 4 z positions
+            ax = fig.add_subplot(len(field_names), min(n_z, 4), i * min(n_z, 4) + z + 1)
+            
+            # Extract the 2D slice at this timestep and z position
+            slice_data = field_data[timestep, z, :, :]
+            
+            # Plot as image
+            im = ax.imshow(slice_data, origin='lower', cmap='viridis', 
+                         interpolation='none', aspect='equal')
+            
+            # Add colorbar
+            cbar = plt.colorbar(im, ax=ax)
+            cbar.set_label(field)
+            
+            # Set labels
+            ax.set_title(f"{field} (Z={z}, T={timestep})")
+            ax.set_xlabel("X")
+            ax.set_ylabel("Y")
     
     plt.tight_layout()
+    plt.subplots_adjust(top=0.9)  # Adjust for suptitle
     return fig
 
-def visualize_vector_field(data, spatial_grid, title=None, sample_rate=5):
+def create_vector_field_plot(data, field_names, shape, title=None, timestep=0, z_pos=0, skip=3):
     """
-    Visualize a 3D vector field using quiver plots at slices.
+    Create a vector field plot from component data.
     
     Parameters:
     -----------
-    data : ndarray
-        Vector field data with shape (nx, ny, nz, 3)
-    spatial_grid : ndarray
-        Spatial grid coordinates (x, y, z) for each data point
-    title : str or None
-        Plot title
-    sample_rate : int
-        Sample every N points for clarity
+    data : dict
+        Dictionary with field data
+    field_names : list
+        List of field names (should be 3 components)
+    shape : tuple
+        Shape of the dataset
+    title : str
+        Title for the plot
+    timestep : int
+        Timestep to visualize
+    z_pos : int
+        Z position to visualize
+    skip : int
+        Number of points to skip for clarity
     """
-    # Extract dimensions
-    nx, ny, nz = data.shape[:3]
-    
-    # Reshape spatial grid for easier indexing
-    x = spatial_grid[:, :, :, 0].reshape(nx, ny, nz)
-    y = spatial_grid[:, :, :, 1].reshape(nx, ny, nz)
-    z = spatial_grid[:, :, :, 2].reshape(nx, ny, nz)
+    if len(field_names) < 2:
+        raise ValueError("Need at least 2 components for vector plot")
     
     # Create figure
-    fig = plt.figure(figsize=(18, 6))
-    
-    # Mid-points
-    mid_x = nx // 2
-    mid_y = ny // 2
-    mid_z = nz // 2
-    
-    # XY slice
-    ax1 = fig.add_subplot(131)
-    X, Y = np.meshgrid(
-        np.arange(0, nx, sample_rate),
-        np.arange(0, ny, sample_rate)
-    )
-    u = data[::sample_rate, ::sample_rate, mid_z, 0]
-    v = data[::sample_rate, ::sample_rate, mid_z, 1]
-    ax1.quiver(X, Y, u, v)
-    ax1.set_title(f'XY Slice (Z={mid_z})')
-    ax1.set_aspect('equal')
-    
-    # XZ slice
-    ax2 = fig.add_subplot(132)
-    X, Z = np.meshgrid(
-        np.arange(0, nx, sample_rate),
-        np.arange(0, nz, sample_rate)
-    )
-    u = data[::sample_rate, mid_y, ::sample_rate, 0]
-    w = data[::sample_rate, mid_y, ::sample_rate, 2]
-    ax2.quiver(X, Z, u, w)
-    ax2.set_title(f'XZ Slice (Y={mid_y})')
-    ax2.set_aspect('equal')
-    
-    # YZ slice
-    ax3 = fig.add_subplot(133)
-    Y, Z = np.meshgrid(
-        np.arange(0, ny, sample_rate),
-        np.arange(0, nz, sample_rate)
-    )
-    v = data[mid_x, ::sample_rate, ::sample_rate, 1]
-    w = data[mid_x, ::sample_rate, ::sample_rate, 2]
-    ax3.quiver(Y, Z, v, w)
-    ax3.set_title(f'YZ Slice (X={mid_x})')
-    ax3.set_aspect('equal')
+    fig = plt.figure(figsize=(10, 8))
+    ax = plt.subplot(111)
     
     if title:
-        fig.suptitle(title, fontsize=16)
+        plt.title(title)
+        
+    # Extract the 2D slices for the vector components
+    x_comp = data[field_names[0]][timestep, z_pos, ::skip, ::skip]
+    y_comp = data[field_names[1]][timestep, z_pos, ::skip, ::skip]
     
-    plt.tight_layout()
+    # Create a grid for the vectors
+    ny, nx = x_comp.shape
+    X, Y = np.meshgrid(np.arange(nx), np.arange(ny))
+    
+    # Calculate vector magnitudes for color mapping
+    magnitudes = np.sqrt(x_comp**2 + y_comp**2)
+    
+    # Normalize vectors for better visualization
+    scale = np.max(magnitudes) * 1.5
+    x_comp_norm = x_comp / scale
+    y_comp_norm = y_comp / scale
+    
+    # Create vector plot
+    q = ax.quiver(X, Y, x_comp_norm, y_comp_norm, magnitudes, 
+                 cmap='viridis', pivot='mid', scale=1.0)
+    
+    cbar = plt.colorbar(q, ax=ax)
+    cbar.set_label('Magnitude')
+    
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_aspect('equal')
+    
     return fig
 
-def plot_magnetic_field_and_potential(hdf5_file, time_index=0, parameter_indices=None):
+def create_3d_vector_field(data, field_names, shape, title=None, timestep=0, skip=5):
     """
-    Plot magnetic field vectors and potential scalar field from HDF5 file.
+    Create a 3D vector field visualization.
     
     Parameters:
     -----------
-    hdf5_file : str
-        Path to the HDF5 file
-    time_index : int
-        Index of the timestep to visualize
-    parameter_indices : list or None
-        List of parameter indices [p1_idx, p2_idx, p3_idx, p4_idx] or None
+    data : dict
+        Dictionary with field data
+    field_names : list
+        List of field names (should be 3 components)
+    shape : tuple
+        Shape of the dataset
+    title : str
+        Title for the plot
+    timestep : int
+        Timestep to visualize
+    skip : int
+        Number of points to skip for clarity
     """
-    # Load magnetic field data (assuming "Bdot vectors" is the field group)
-    try:
-        bdot_data, spatial_grid, bdot_metadata = read_hdf5_maya_data(
-            hdf5_file, 
-            "Bdot vectors", 
-            parameter_indices=parameter_indices, 
-            time_index=time_index
-        )
-        
-        # Create title with metadata
-        time_value = bdot_metadata.get('timestep_value', time_index)
-        title = f"Magnetic Field (Bdot) at t={time_value}"
-        if 'units' in bdot_metadata:
-            title += f" [{bdot_metadata['units']}]"
-            
-        # Visualize magnetic field
-        visualize_vector_field(bdot_data, spatial_grid, title=title)
-        plt.savefig('magnetic_field.png', dpi=300)
-        plt.close()
-        
-        print(f"Magnetic field visualization saved as 'magnetic_field.png'")
-    except Exception as e:
-        print(f"Error plotting magnetic field: {e}")
-    
-    # Load potential data (assuming field name is "potential" - adjust if different)
-    try:
-        potential_data, spatial_grid, potential_metadata = read_hdf5_maya_data(
-            hdf5_file, 
-            "potential", 
-            parameter_indices=parameter_indices, 
-            time_index=time_index
-        )
-        
-        # Create title with metadata
-        time_value = potential_metadata.get('timestep_value', time_index)
-        title = f"Scalar Potential at t={time_value}"
-        if 'units' in potential_metadata:
-            title += f" [{potential_metadata['units']}]"
-            
-        # Visualize potential field
-        visualize_scalar_field(potential_data, spatial_grid, title=title)
-        plt.savefig('potential_field.png', dpi=300)
-        plt.close()
-        
-        print(f"Potential field visualization saved as 'potential_field.png'")
-    except Exception as e:
-        print(f"Error plotting potential field: {e}")
-
-def compare_files(file1, file2, data_group, time_index=0, parameter_indices=None):
-    """
-    Compare the same data group from two different HDF5 files.
-    
-    Parameters:
-    -----------
-    file1, file2 : str
-        Paths to the HDF5 files
-    data_group : str
-        Name of the data group to compare
-    time_index : int
-        Index of the timestep to visualize
-    parameter_indices : list or None
-        List of parameter indices [p1_idx, p2_idx, p3_idx, p4_idx] or None
-    """
-    # Load data from both files
-    data1, grid1, meta1 = read_hdf5_maya_data(
-        file1, data_group, parameter_indices=parameter_indices, time_index=time_index
-    )
-    
-    data2, grid2, meta2 = read_hdf5_maya_data(
-        file2, data_group, parameter_indices=parameter_indices, time_index=time_index
-    )
-    
-    # Calculate difference
-    diff = data2 - data1
+    if len(field_names) < 3:
+        raise ValueError("Need 3 components for 3D vector plot")
     
     # Create figure
-    fig = plt.figure(figsize=(15, 5))
+    fig = plt.figure(figsize=(12, 10))
+    ax = fig.add_subplot(111, projection='3d')
     
-    # Mid-point for visualization
-    mid_z = data1.shape[2] // 2
+    if title:
+        plt.title(title)
     
-    # First dataset
-    ax1 = fig.add_subplot(131)
-    im1 = ax1.imshow(data1[:, :, mid_z], cmap='viridis', origin='lower')
-    ax1.set_title(f'File 1: {data_group}')
-    plt.colorbar(im1, ax=ax1)
+    # Get data dimensions
+    n_timesteps, n_z, n_y, n_x = shape
     
-    # Second dataset
-    ax2 = fig.add_subplot(132)
-    im2 = ax2.imshow(data2[:, :, mid_z], cmap='viridis', origin='lower')
-    ax2.set_title(f'File 2: {data_group}')
-    plt.colorbar(im2, ax=ax2)
+    # Create coordinate grid (simplified - assumes uniform spacing)
+    Z, Y, X = np.meshgrid(
+        np.arange(n_z)[::skip],
+        np.arange(n_y)[::skip],
+        np.arange(n_x)[::skip],
+        indexing='ij'
+    )
     
-    # Difference
-    ax3 = fig.add_subplot(133)
-    im3 = ax3.imshow(diff[:, :, mid_z], cmap='RdBu_r', origin='lower')
-    ax3.set_title('Difference (File2 - File1)')
-    plt.colorbar(im3, ax=ax3)
+    # Flatten coordinate arrays for quiver3d
+    x_pos = X.flatten()
+    y_pos = Y.flatten()
+    z_pos = Z.flatten()
     
-    # Overall title
-    time1 = meta1.get('timestep_value', time_index)
-    time2 = meta2.get('timestep_value', time_index)
-    title = f"Comparison of {data_group} at t={time1} vs t={time2}"
-    fig.suptitle(title, fontsize=16)
+    # Extract vector components at this timestep and downsample
+    u = data[field_names[0]][timestep, ::skip, ::skip, ::skip].flatten()
+    v = data[field_names[1]][timestep, ::skip, ::skip, ::skip].flatten()
+    w = data[field_names[2]][timestep, ::skip, ::skip, ::skip].flatten()
+    
+    # Calculate magnitudes for color mapping
+    magnitudes = np.sqrt(u**2 + v**2 + w**2)
+    
+    # Normalize vectors for better visualization
+    scale = np.max(magnitudes) * 2.0
+    u_norm = u / scale
+    v_norm = v / scale
+    w_norm = w / scale
+    
+    # Create 3D vector plot
+    q = ax.quiver(x_pos, y_pos, z_pos, u_norm, v_norm, w_norm, 
+                 length=0.5, normalize=False, cmap='viridis')
+    
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    
+    # Improve 3D view
+    ax.view_init(elev=30, azim=45)
+    
+    return fig
+
+def visualize_time_evolution(data, field_name, shape, z_pos=0, n_times=5):
+    """
+    Visualize the time evolution of a field component.
+    
+    Parameters:
+    -----------
+    data : dict
+        Dictionary with field data
+    field_name : str
+        Field name to visualize
+    shape : tuple
+        Shape of the dataset
+    z_pos : int
+        Z position to visualize
+    n_times : int
+        Number of timesteps to show
+    """
+    # Create figure
+    fig = plt.figure(figsize=(15, 10))
+    
+    # Get field data
+    field_data = data[field_name]
+    
+    # We assume the shape is (timesteps, z_positions, y, x)
+    n_timesteps, n_z, n_y, n_x = shape
+    
+    # Select timesteps to visualize
+    timesteps = np.linspace(0, n_timesteps-1, n_times, dtype=int)
+    
+    # Plot each timestep
+    for i, t in enumerate(timesteps):
+        ax = fig.add_subplot(2, (n_times+1)//2, i+1)
+        
+        # Extract the 2D slice at this timestep and z position
+        slice_data = field_data[t, z_pos, :, :]
+        
+        # Plot as image
+        im = ax.imshow(slice_data, origin='lower', cmap='viridis', 
+                      interpolation='none', aspect='equal')
+        
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=ax)
+        
+        # Set labels
+        ax.set_title(f"Time {t}")
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
     
     plt.tight_layout()
-    plt.savefig(f'comparison_{data_group}.png', dpi=300)
-    plt.close()
+    plt.suptitle(f"Time Evolution of {field_name} (Z={z_pos})", fontsize=16)
+    plt.subplots_adjust(top=0.9)
     
-    print(f"Comparison visualization saved as 'comparison_{data_group}.png'")
+    return fig
+
+def main():
+    """Main function to read and visualize HDF5 data."""
+    # File paths
+    b_field_file = "b37-40.hdf5"
+    e_field_file = "e37-40.hdf5"
     
-    return np.max(np.abs(diff)), np.mean(np.abs(diff))
-
-def main(): 
-    # %matplotlib inline
-    b37 = "b37-40.hdf5"
-    e37 = "e37-40.hdf5"
+    # Print detailed information about the files
+    try:
+        read_hdf5_info(b_field_file)
+        read_hdf5_info(e_field_file)
+    except Exception as e:
+        print(f"Error reading HDF5 info: {e}")
     
-    # Plot magnetic field and potential for first file
-    plot_magnetic_field_and_potential(
-        b37,
-        time_index=0,  # First timestep
-        parameter_indices=[0, 0, 0, 0]  # First value of each parameter
-    )
+    # Read magnetic field data correctly
+    try:
+        # Based on the error output, we know the path is "B vectors/Bvec"
+        b_data, b_shape = read_compound_dataset(b_field_file, "B vectors/Bvec")
+        print(f"Successfully read B field data with shape {b_shape}")
+        print(f"Components: {list(b_data.keys())}")
+        
+        # Visualize magnetic field components
+        fig = visualize_field_components(
+            b_data, 
+            ['DATA_X', 'DATA_Y', 'DATA_Z'], 
+            b_shape,
+            title="Magnetic Field Components (Gauss)",
+            timestep=0  # First timestep
+        )
+        plt.savefig('b_field_components.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved magnetic field components plot to 'b_field_components.png'")
+        
+        # Create vector field plot for magnetic field
+        fig = create_vector_field_plot(
+            b_data,
+            ['DATA_X', 'DATA_Y'],
+            b_shape,
+            title="Magnetic Field Vectors (XY-plane)",
+            timestep=0,  # First timestep
+            z_pos=0,     # First Z position
+            skip=3       # Skip every 3 points for clarity
+        )
+        plt.savefig('b_field_vectors.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved magnetic field vector plot to 'b_field_vectors.png'")
+        
+        # Create 3D vector field visualization
+        try:
+            fig = create_3d_vector_field(
+                b_data,
+                ['DATA_X', 'DATA_Y', 'DATA_Z'],
+                b_shape,
+                title="3D Magnetic Field Vectors",
+                timestep=0,  # First timestep
+                skip=2       # Skip every 2 points for clarity
+            )
+            plt.savefig('b_field_3d.png', dpi=300, bbox_inches='tight')
+            plt.close(fig)
+            print("Saved 3D magnetic field visualization to 'b_field_3d.png'")
+        except Exception as e:
+            print(f"Error creating 3D vector field: {e}")
+        
+        # Visualize time evolution
+        fig = visualize_time_evolution(
+            b_data,
+            'DATA_Z',  # Z-component
+            b_shape,
+            z_pos=0,   # First Z position
+            n_times=6  # Show 6 timesteps
+        )
+        plt.savefig('b_field_time_evolution.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved time evolution plot to 'b_field_time_evolution.png'")
+        
+    except Exception as e:
+        print(f"Error processing magnetic field data: {e}")
+        import traceback
+        traceback.print_exc()
     
-    # Compare magnetic field between two files
-    max_diff, mean_diff = compare_files(
-        b37,
-        e37,
-        "Bdot vectors",  # Compare magnetic fields
-        time_index=0,
-        parameter_indices=[0, 0, 0, 0]
-    )
+    # Read electric field data correctly
+    try:
+        # Path is "E vectors/Evec" based on the error output
+        e_data, e_shape = read_compound_dataset(e_field_file, "E vectors/Evec")
+        print(f"Successfully read E field data with shape {e_shape}")
+        print(f"Components: {list(e_data.keys())}")
+        
+        # Visualize electric field components
+        fig = visualize_field_components(
+            e_data, 
+            ['DATA_X', 'DATA_Y', 'DATA_Z'], 
+            e_shape,
+            title="Electric Field Components (V/cm)",
+            timestep=0  # First timestep
+        )
+        plt.savefig('e_field_components.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved electric field components plot to 'e_field_components.png'")
+        
+        # Create vector field plot for electric field
+        fig = create_vector_field_plot(
+            e_data,
+            ['DATA_X', 'DATA_Y'],
+            e_shape,
+            title="Electric Field Vectors (XY-plane)",
+            timestep=0,  # First timestep
+            z_pos=0,     # First Z position
+            skip=3       # Skip every 3 points for clarity
+        )
+        plt.savefig('e_field_vectors.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved electric field vector plot to 'e_field_vectors.png'")
+        
+    except Exception as e:
+        print(f"Error processing electric field data: {e}")
+        import traceback
+        traceback.print_exc()
     
-    print(f"Maximum difference: {max_diff}")
-    print(f"Mean absolute difference: {mean_diff}")
+    # Try to calculate ExB drift
+    try:
+        # Since we have the data as separate components, we can calculate ExB drift
+        timestep = 0  # Use first timestep
+        z_pos = 0     # Use first Z position
+        
+        # Get field components at this timestep and z position
+        ex = e_data['DATA_X'][timestep, z_pos]
+        ey = e_data['DATA_Y'][timestep, z_pos]
+        ez = e_data['DATA_Z'][timestep, z_pos]
+        
+        bx = b_data['DATA_X'][timestep, z_pos]
+        by = b_data['DATA_Y'][timestep, z_pos]
+        bz = b_data['DATA_Z'][timestep, z_pos]
+        
+        # Calculate B magnitude
+        b_mag = np.sqrt(bx**2 + by**2 + bz**2)
+        
+        # Calculate ExB drift velocity components
+        # vExB = (E×B)/B²
+        exb_x = (ey * bz - ez * by) / (b_mag**2 + 1e-10)  # Add small value to avoid division by zero
+        exb_y = (ez * bx - ex * bz) / (b_mag**2 + 1e-10)
+        exb_z = (ex * by - ey * bx) / (b_mag**2 + 1e-10)
+        
+        # Create figure for ExB drift
+        fig = plt.figure(figsize=(12, 10))
+        
+        # Plot ExB x-component
+        ax1 = fig.add_subplot(221)
+        im1 = ax1.imshow(exb_x, origin='lower', cmap='RdBu_r', 
+                        interpolation='none', aspect='equal')
+        plt.colorbar(im1, ax=ax1)
+        ax1.set_title('ExB X-component')
+        
+        # Plot ExB y-component
+        ax2 = fig.add_subplot(222)
+        im2 = ax2.imshow(exb_y, origin='lower', cmap='RdBu_r', 
+                        interpolation='none', aspect='equal')
+        plt.colorbar(im2, ax=ax2)
+        ax2.set_title('ExB Y-component')
+        
+        # Plot ExB z-component
+        ax3 = fig.add_subplot(223)
+        im3 = ax3.imshow(exb_z, origin='lower', cmap='RdBu_r', 
+                        interpolation='none', aspect='equal')
+        plt.colorbar(im3, ax=ax3)
+        ax3.set_title('ExB Z-component')
+        
+        # Plot ExB magnitude
+        exb_mag = np.sqrt(exb_x**2 + exb_y**2 + exb_z**2)
+        ax4 = fig.add_subplot(224)
+        im4 = ax4.imshow(exb_mag, origin='lower', cmap='viridis', 
+                        interpolation='none', aspect='equal')
+        plt.colorbar(im4, ax=ax4)
+        ax4.set_title('ExB Magnitude')
+        
+        plt.tight_layout()
+        plt.suptitle('ExB Drift Velocity', fontsize=16)
+        plt.subplots_adjust(top=0.9)
+        
+        plt.savefig('exb_drift.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved ExB drift plot to 'exb_drift.png'")
+        
+        # Create vector plot of ExB drift
+        fig = plt.figure(figsize=(10, 8))
+        ax = plt.subplot(111)
+        
+        # Create a grid for the vectors
+        skip = 3  # Skip every 3 points for clarity
+        ny, nx = exb_x.shape
+        X, Y = np.meshgrid(np.arange(0, nx, skip), np.arange(0, ny, skip))
+        
+        # Downsample for clarity
+        exb_x_ds = exb_x[::skip, ::skip]
+        exb_y_ds = exb_y[::skip, ::skip]
+        exb_mag_ds = exb_mag[::skip, ::skip]
+        
+        # Normalize vectors for better visualization
+        scale = np.max(exb_mag_ds) * 1.5
+        exb_x_norm = exb_x_ds / (scale + 1e-10)
+        exb_y_norm = exb_y_ds / (scale + 1e-10)
+        
+        # Create vector plot
+        q = ax.quiver(X, Y, exb_x_norm, exb_y_norm, exb_mag_ds, 
+                     cmap='viridis', pivot='mid', scale=1.0)
+        
+        cbar = plt.colorbar(q, ax=ax)
+        cbar.set_label('ExB Drift Magnitude')
+        
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_title('ExB Drift Velocity Vectors')
+        ax.set_aspect('equal')
+        
+        plt.savefig('exb_drift_vectors.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved ExB drift vector plot to 'exb_drift_vectors.png'")
+        
+    except Exception as e:
+        print(f"Error calculating ExB drift: {e}")
+        import traceback
+        traceback.print_exc()
 
-
-
-
-if __name__ == '__main__':
-  main()
+if __name__ == "__main__":
+    main()
