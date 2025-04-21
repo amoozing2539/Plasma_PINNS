@@ -183,6 +183,73 @@ def create_vector_field_plot(data, field_names, shape, title=None, timestep=0, z
     
     return fig
 
+def create_streamline_plot(data, field_names, shape, title=None, timestep=0, z_pos=0, skip=1, density=1, linewidth=1, cmap='viridis'):
+    """
+    Create a streamline plot from vector field components.
+    
+    Parameters:
+    -----------
+    data : dict
+        Dictionary with field data
+    field_names : list
+        List of field names (should be 2 components)
+    shape : tuple
+        Shape of the dataset
+    title : str
+        Title for the plot
+    timestep : int
+        Timestep to visualize
+    z_pos : int
+        Z position to visualize
+    skip : int
+        Number of points to skip for downsampling
+    density : float
+        Density of streamlines
+    linewidth : float
+        Linewidth of streamlines
+    cmap : str
+        Colormap for magnitude coloring
+    """
+    if len(field_names) < 2:
+        raise ValueError("Need at least 2 components for streamline plot")
+    
+    fig = plt.figure(figsize=(10, 8))
+    ax = plt.subplot(111)
+    
+    if title:
+        plt.title(title)
+        
+    # Get original dimensions from the dataset shape (timesteps, z, y, x)
+    _, _, original_ny, original_nx = shape
+    
+    # Generate indices for downsampling
+    y_indices = np.arange(0, original_ny, skip)
+    x_indices = np.arange(0, original_nx, skip)
+    
+    # Extract the 2D slices with downsampling
+    x_comp = data[field_names[0]][timestep, z_pos, ::skip, ::skip]
+    y_comp = data[field_names[1]][timestep, z_pos, ::skip, ::skip]
+    
+    # Create grid using original coordinates
+    X, Y = np.meshgrid(x_indices, y_indices)
+    
+    # Calculate magnitude for coloring
+    magnitude = np.sqrt(x_comp**2 + y_comp**2)
+    
+    # Create streamline plot
+    strm = ax.streamplot(X, Y, x_comp, y_comp, color=magnitude,
+                         density=density, linewidth=linewidth, cmap=cmap)
+    
+    # Add colorbar
+    cbar = plt.colorbar(strm.lines, ax=ax)
+    cbar.set_label('Magnitude')
+    
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_aspect('equal')
+    
+    return fig
+
 def create_3d_vector_field(data, field_names, shape, title=None, timestep=0, skip=5):
     """
     Create a 3D vector field visualization.
@@ -355,6 +422,23 @@ def main():
         plt.close(fig)
         print("Saved magnetic field vector plot to 'b_field_vectors.png'")
         
+        # Create streamline plot for magnetic field
+        fig = create_streamline_plot(
+            b_data,
+            ['DATA_X', 'DATA_Y'],
+            b_shape,
+            title="Magnetic Field Streamlines (XY-plane)",
+            timestep=0,
+            z_pos=0,
+            skip=3,
+            density=1,
+            linewidth=1,
+            cmap='viridis'
+        )
+        plt.savefig('b_field_streamlines.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved magnetic field streamline plot to 'b_field_streamlines.png'")
+        
         # Create 3D vector field visualization
         try:
             fig = create_3d_vector_field(
@@ -420,6 +504,23 @@ def main():
         plt.savefig('e_field_vectors.png', dpi=300, bbox_inches='tight')
         plt.close(fig)
         print("Saved electric field vector plot to 'e_field_vectors.png'")
+        
+        # Create streamline plot for electric field
+        fig = create_streamline_plot(
+            e_data,
+            ['DATA_X', 'DATA_Y'],
+            e_shape,
+            title="Electric Field Streamlines (XY-plane)",
+            timestep=0,
+            z_pos=0,
+            skip=3,
+            density=1,
+            linewidth=1,
+            cmap='viridis'
+        )
+        plt.savefig('e_field_streamlines.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved electric field streamline plot to 'e_field_streamlines.png'")
         
     except Exception as e:
         print(f"Error processing electric field data: {e}")
@@ -524,6 +625,29 @@ def main():
         plt.savefig('exb_drift_vectors.png', dpi=300, bbox_inches='tight')
         plt.close(fig)
         print("Saved ExB drift vector plot to 'exb_drift_vectors.png'")
+        
+        # Create streamline plot for ExB drift
+        fig = plt.figure(figsize=(10, 8))
+        ax = plt.subplot(111)
+        
+        # Create grid using original coordinates
+        X, Y = np.meshgrid(np.arange(0, nx, skip), np.arange(0, ny, skip))
+        
+        # Create streamline plot
+        strm = ax.streamplot(X, Y, exb_x_ds, exb_y_ds, color=exb_mag_ds,
+                             density=1, linewidth=1, cmap='viridis')
+        
+        cbar = plt.colorbar(strm.lines, ax=ax)
+        cbar.set_label('ExB Drift Magnitude')
+        
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_title('ExB Drift Streamlines')
+        ax.set_aspect('equal')
+        
+        plt.savefig('exb_drift_streamlines.png', dpi=300, bbox_inches='tight')
+        plt.close(fig)
+        print("Saved ExB drift streamline plot to 'exb_drift_streamlines.png'")
         
     except Exception as e:
         print(f"Error calculating ExB drift: {e}")
