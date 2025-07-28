@@ -30,7 +30,7 @@ vth = .1
 omega_ce = 2.
 omega = 2.5
 omega_pe = 1.
-E_amp = 1.
+phi_amp = 1.
 
 
 def set_seed(seed: int = 42) -> None: #meaning of life 
@@ -164,67 +164,71 @@ def phase_factor(delta):
     return np.exp(1j*delta)
 
 
-def analytical_solution(x, t, omega, k, E_amp, delta):
+def analytical_solution(x, t, omega, k, phi_amp, delta):
     
-    E_amp *= phase_factor(delta)
+    phi_amp *= phase_factor(delta)
     
     c=1 #just for clarity
     factor_dielectric = omega_pe**2/ (omega**2 - omega_ce**2)
-    factor_freq = omega_ce/(omega_pe*omega)
+    factor_freq = omega_ce/(omega_pe)
+    vel_factor = 1-(factor_freq**2)*(1/omega**2)
     K = 1-factor_dielectric
     D = (omega_ce/omega) * factor_dielectric
     Nsq = (c**2 * k**2)/omega**2
     
-    Ex = E_amp * np.exp(1j*(k*x - omega*t)) #longtiduninal electrostatic part (vector)
-    Ey = Ex * 1j*D/(K-Nsq) #transverse electromagnetic part
-    Bz = k*Ey*t #(vector)
-    Vx = (1/omega)*(-1j*Ex - factor_freq*Ey)*(1/(1-factor_freq)) #(vector)
-    Vy = (1/omega)*(-1j*Ey - factor_freq*Ex)*(1/(1-factor_freq))
-    N = (k/omega) * Vx #(scaler) N' = N/N0
-    phi = (1j/k)*Ex #(scaler) phi measurements
-    Bdot = -1j*omega*Bz #(vector) Bdot measurements (z direction)
-    P = vth**2 * (N**3) #(scaler) electron pressure
+    phi = phi_amp * np.exp(1j(k*x - omega*t))
+    Ex = (1j/k)*(omega**2 + k**2)*phi
+    Ey = 1j*(D/K-Nsq)*Ex
+    Bz = (k/omega)*Ey
+    Ax = (omega/k)*Bz
+    Ay = (-1j/omega)*Ey
+    Vx = (1/omega**2)*(-1j*omega*Ex - factor_freq*Ey)*(vel_factor**-1)
+    Vy = (1/omega**2)*(-1j*omega*Ey - factor_freq*Ex)*(vel_factor**-1)
+    N = (omega**2 + k**2)*phi
      
-    return Ex, Ey, Bz, Vx, Vy, N, P, phi, Bdot,
+    return phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N
 
 
-def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_list, E_amp_list, delta_list):
+def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_list, phi_amp_list, delta_list):
 
-    if not check_size_eq([omega_list, E_amp_list, delta_list]):
+    if not check_size_eq([omega_list, phi_amp_list, delta_list]):
         raise Exception("Parameter lists are not the same size!")
 
     x = np.linspace(xmin, xmax, nx)
     t = np.linspace(tmin, tmax, nt)
 
     x_arr, t_arr = np.meshgrid(x,t)
-
+    
+    phi = np.zeros_like(x_arr, dtype=np.complex128)
+    Bdot = np.zeros_like(x_arr, dtype=np.complex128)
+    Ax = np.zeros_like(x_arr, dtype=np.complex128)
+    Ay = np.zeros_like(x_arr, dtype=np.complex128)
     Ex = np.zeros_like(x_arr, dtype=np.complex128)
     Ey = np.zeros_like(x_arr, dtype=np.complex128)
     Bz = np.zeros_like(x_arr, dtype=np.complex128)
     Vx = np.zeros_like(x_arr, dtype=np.complex128)
     Vy = np.zeros_like(x_arr, dtype=np.complex128)
     N = np.zeros_like(x_arr, dtype=np.complex128)
-    phi = np.zeros_like(x_arr, dtype=np.complex128)
-    Bdot = np.zeros_like(x_arr, dtype=np.complex128)
-    P = np.zeros_like(x_arr, dtype=np.complex128)
 
     for i in range(len(omega_list)):
-        temp_Ex, temp_Ey, temp_Bz, temp_Vx, temp_Vy, temp_N, temp_P, temp_phi, temp_Bdot, = analytical_solution(x_arr, t_arr, omega_list[i], \
+        temp_phi, temp_Bdot, temp_Ax, temp_Ay, temp_Ex, temp_Ey, temp_Bz, temp_Vx, temp_Vy, temp_N = analytical_solution(x_arr, t_arr, omega_list[i], \
                                                                x_wave_dispersion(omega_list[i], omega_ce, omega_pe)[0], \
-                                                               E_amp_list[i], delta_list[i])
+                                                               phi_amp_list[i], delta_list[i])
+        phi += temp_phi
+        Bdot += temp_Bdot
+        Ax += temp_Ax
+        Ay += temp_Ay
         Ex += temp_Ex
         Ey += temp_Ey
         Bz += temp_Bz
         Vx += temp_Vx
         Vy += temp_Vy
         N += temp_N
-        phi += temp_phi
-        Bdot += temp_Bdot
-        P += temp_P
+        
 
-    return x_arr.flatten(), t_arr.flatten(), np.real(Ex).flatten(),np.real(Ey).flatten(), \
-            np.real(Bz).flatten(), np.real(Vx).flatten(), np.real(Vy).flatten(), \
-            np.real(N).flatten(), np.real(P).flatten(), np.real(phi).flatten(), np.real(Bdot).flatten()
+    return x_arr.flatten(), t_arr.flatten(), np.real(phi).flatten(),np.real(Bdot).flatten(), \
+            np.real(Ax).flatten(), np.real(Ay).flatten(), np.real(Ex).flatten(), \
+            np.real(Ey).flatten(), np.real(Bz).flatten(), np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten()
 
 
 def sparse_measurements(x, t, phi, Bdot, num_samples):
@@ -248,7 +252,7 @@ def collocation_points(xmin, xmax, tmin, tmax, Nx, Nt, L, tau):
 
 
 omega_list = [omega]
-E_amp_list = [E_amp]  # Amplitude of the electric field
+phi_amp_list = [phi_amp]  # Amplitude of the electric field
 delta_list = [0.0]  # Phase factor for the wave solution
 
 lamda = 2 * np.pi / k  # Wavelength
@@ -276,8 +280,8 @@ print(f"dx = {dx:.3e} [c / omega_pe]")
 print(f"dt = {dt:.3e} [1 / omega_pe]")
 
 
-X_flat, T_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat,  N_flat, P_flat, phi_flat, Bdot_flat = generate_data(
-xmin, xmax, tmin, tmax, Nx, Nt, omega_list, E_amp_list, delta_list)
+X_arr, T_arr, phi_flat, Bdot_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat, = generate_data(
+xmin, xmax, tmin, tmax, Nx, Nt, omega_list, phi_amp_list, delta_list)
 
 x_sparse, t_sparse, phi_sparse, Bdot_sparse = sparse_measurements(X_flat, T_flat, phi_flat, Bdot_flat, num_samples=200)
 
@@ -306,19 +310,13 @@ def derivative_t(f, dt):
 
 
 #Ground Truth Values
-Ex_GT = Ex_flat.reshape(Nt, Nx)
-Ey_GT = Ey_flat.reshape(Nt, Nx)
-Bz_GT = Bz_flat.reshape(Nt, Nx)
-Vx_GT = Vx_flat.reshape(Nt, Nx)
-Vy_GT = Vy_flat.reshape(Nt, Nx)
-P_GT = P_flat.reshape(Nt, Nx)
-N_GT = N_flat.reshape(Nt, Nx)
-P_x_GT = derivative_x(P_GT, dx)
-phi_GT = phi_flat.reshape(Nt, Nx)
-Bdot_GT = Bdot_flat.reshape(Nt, Nx)
+quantities_flat = [phi_flat, Bdot_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat]
+quantities_GT = [x.reshape(Nt, Nx) for x in quantities_flat]
+titles_analytical = 
+
 
 #Plot GTs
-def plot_analytical():
+def plot_analytical(quantities, titles, extent):
     """Plot the analytical solution."""
     titles = [f'$E_x [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (longitudinal)', 
               f'$E_y [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (transverse)', 
@@ -1029,7 +1027,7 @@ def run_ddp_training(rank, world_size, params):
     torch.cuda.set_device(rank) #set the specific GPU for this process. 
     
     #Define physical parameters 
-    E_amp = 1.
+    phi_amp = 1.
     k, k_lambda_D = x_wave_dispersion(omega, omega_ce, omega_pe)
     lamda_wave = 2*np.pi/k
     T_wave = (2*np.pi)/omega
