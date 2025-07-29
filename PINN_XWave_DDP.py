@@ -176,7 +176,7 @@ def analytical_solution(x, t, omega, k, phi_amp, delta):
     D = (omega_ce/omega) * factor_dielectric
     Nsq = (c**2 * k**2)/omega**2
     
-    phi = phi_amp * np.exp(1j(k*x - omega*t))
+    phi = phi_amp * np.exp(1j*(k*x - omega*t))
     Ex = (1j/k)*(omega**2 + k**2)*phi
     Ey = 1j*(D/K-Nsq)*Ex
     Bz = (k/omega)*Ey
@@ -185,6 +185,7 @@ def analytical_solution(x, t, omega, k, phi_amp, delta):
     Vx = (1/omega**2)*(-1j*omega*Ex - factor_freq*Ey)*(vel_factor**-1)
     Vy = (1/omega**2)*(-1j*omega*Ey - factor_freq*Ex)*(vel_factor**-1)
     N = (omega**2 + k**2)*phi
+    Bdot = -1j*k*Ey
      
     return phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N
 
@@ -280,10 +281,10 @@ print(f"dx = {dx:.3e} [c / omega_pe]")
 print(f"dt = {dt:.3e} [1 / omega_pe]")
 
 
-X_arr, T_arr, phi_flat, Bdot_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat, = generate_data(
+X_arr, T_arr, phi_flat, Bdot_flat, Ax_flat, Ay_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat, = generate_data(
 xmin, xmax, tmin, tmax, Nx, Nt, omega_list, phi_amp_list, delta_list)
 
-x_sparse, t_sparse, phi_sparse, Bdot_sparse = sparse_measurements(X_flat, T_flat, phi_flat, Bdot_flat, num_samples=200)
+x_sparse, t_sparse, phi_sparse, Bdot_sparse = sparse_measurements(X_arr, T_arr, phi_flat, Bdot_flat, num_samples=200)
 
 x_coll, t_coll, dx, dt = collocation_points(xmin, xmax, tmin, tmax, Nx_coll, Nt_coll, L, tau)
 
@@ -310,13 +311,13 @@ def derivative_t(f, dt):
 
 
 #Ground Truth Values
-quantities_flat = [phi_flat, Bdot_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat]
+quantities_flat = [phi_flat, Bdot_flat, Ax_flat, Ay_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat]
 extent_GT = [xmin, xmax, tmin, tmax]
 quantities_GT = [x.reshape(Nt, Nx) for x in quantities_flat]
 titles_GT = [f'$\phi [\\frac{{m_{{e}}c^2}}{{e}}]$', 
             f'$\dot{{B}} [\\frac{{e}}{{m_{{e}}c}}]$',
-            f'$A_x [\\frac{{m_{{e}}c^2}}{{e}}]',
-            f'$A_y [\\frac{{m_{{e}}c^2}}{{e}}]',
+            f'$A_x [\\frac{{m_{{e}}c^2}}{{e}}]$',
+            f'$A_y [\\frac{{m_{{e}}c^2}}{{e}}]$',
             f'$E_x [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (longitudinal)', 
             f'$E_y [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (transverse)', 
             f'$B_z [\\frac{{e}}{{m_{{e}}c\\omega_{{pe}}}}]$',
@@ -357,8 +358,8 @@ def plot_analytical(quantities, titles, extent):
     plt.savefig("XWave_Ground_Truth_Plots")
 
 #Plot Ground Truth Values
-print("-------Plotting Ground Truth Values-------------")
-plot_analytical(quantities=quantities_GT, titles = titles_GT, extent = extent_GT)
+# print("-------Plotting Ground Truth Values-------------")
+# plot_analytical(quantities=quantities_GT, titles = titles_GT, extent = extent_GT)
 
 
 #Plot constraints
@@ -442,8 +443,8 @@ def plot_constraints(constraints, titles, extent):
     plt.show()
     plt.savefig("XWave_Constraints.png")
     
-print("------Plotting Constraints as is--------------")
-plot_constraints(constraints = constraints, titles = constraint_titles, extent=constraints_ext)
+# print("------Plotting Constraints as is--------------")
+# plot_constraints(constraints = constraints, titles = constraint_titles, extent=constraints_ext)
 
 
 # Helper functions for initialization of network parameters
@@ -636,7 +637,7 @@ def pde_residuals(model, t, x, means, stds):
         
     residuals = torch.zeros(t.size(dim=0), 9).to(t.device)
     
-    phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N = (model(t, x)* stds + means).T
+    phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N = (model(t, x)*stds + means).T
     
     phi = phi.reshape(-1, 1)
     Bdot = Bdot.reshape(-1, 1)
@@ -661,7 +662,8 @@ def pde_residuals(model, t, x, means, stds):
         Ax_t = grad(Ax, t, grad_outputs=torch.ones_like(Ax), create_graph=True)[0]
         Ax_tt = grad(Ax_t, t, grad_outputs=torch.ones_like(Ax_t), create_graph=True)[0]
         Ay_x = grad(Ay, x, grad_outputs=torch.ones_like(Ay), create_graph=True)[0]
-        Ay_tt = grad(Ay_t, grad_outputs=torch.ones_like(Ay_t), create_graph=True)[0]
+        Ay_t = grad(Ay, t, grad_outputs=torch.ones_like(Ay), create_graph=True)[0]
+        Ay_tt = grad(Ay_t, t, grad_outputs=torch.ones_like(Ay_t), create_graph=True)[0]
         
         Ex_x = grad(Ex, x, grad_outputs=torch.ones_like(Ex), create_graph=True)[0]
         Ex_t = grad(Ex, t, grad_outputs=torch.ones_like(Ex), create_graph=True)[0]
@@ -674,16 +676,17 @@ def pde_residuals(model, t, x, means, stds):
         #Don't need derivatives for Vx, Vy, N, or Bdot
         
         residuals[:, 0:1] = Ex_x - N                  #Gauss x
-        residuals[:, 1:2] = Ex + phi_x + Ax_t         #electrostatic x
-        residuals[:, 2:3] = Ey + Ay_t                 #electrostatic y
-        residuals[:, 3:4] = -Bz_x + Vy - Ey_t         #Faraday's y
-        residuals[:, 4:5] = Vx + Ex_t                 #Faraday's x
-        residuals[:, 5:6] = Ey_x + Bdot               #Ampere's z
-        residuals[:, 6:7] = Ax_x + phi_t              #Coulomb Gauge x
-        residuals[:, 7:8] = Ax_tt - Ax_xx + Vx        #Wave Ax 
-        residuals[:, 8:9] = Ay_tt + Vy                #wave Ay 
-        residuals[:, 9:10] = phi_tt - phi_xx + N      #Wave phi
-        residuals[:, 10:11] = Bz_t + Bdot
+        residuals[:, 1:2] = Bz - Ay_t                 #bfield curl A
+        residuals[:, 2:3] = Ex + phi_x + Ax_t         #electrostatic x
+        residuals[:, 3:4] = Ey + Ay_t                 #electrostatic y
+        residuals[:, 4:5] = -Bz_x + Vy - Ey_t         #Faraday's y
+        residuals[:, 5:6] = Vx + Ex_t                 #Faraday's x
+        residuals[:, 6:7] = Ey_x + Bdot               #Ampere's z
+        residuals[:, 7:8] = Ax_x + phi_t              #Coulomb Gauge x
+        residuals[:, 8:9] = Ax_tt - Ax_xx + Vx        #Wave Ax 
+        residuals[:, 9:10] = Ay_tt + Vy               #wave Ay 
+        residuals[:, 10:11] = phi_tt - phi_xx + N     #Wave phi
+        residuals[:, 11:12] = Bz_t + Bdot             #induction
         
     else:
         residuals.fill_(0.0)  # If gradients are not enabled, set residuals to zero
@@ -705,18 +708,20 @@ def get_physics_loss(model, t_coll, x_coll, means, stds, rank):
     gauss_res = residuals[:, 0:1]
     electric_x_res = residuals[:, 1:2]
     electric_y_res = residuals[:, 2:3]
-    faraday_y_res = residuals[:, 3:4]
-    faraday_x_res = residuals[:, 4:5]
-    ampere_z_res = residuals[:, 5:6]
-    coul_gauge_res = residuals[:, 6:7]
-    wave_Ax_res = residuals[:, 7:8]
-    wave_Ay_res = residuals[:, 8:9]
-    wave_phi_res = residuals[:, 9:10]
-    induction_res = residuals[:, 10:11]
+    bfield_curl_A_res = residuals[:, 3:4]
+    faraday_y_res = residuals[:, 4:5]
+    faraday_x_res = residuals[:, 5:6]
+    ampere_z_res = residuals[:, 6:7]
+    coul_gauge_res = residuals[:, 7:8]
+    wave_Ax_res = residuals[:, 8:9]
+    wave_Ay_res = residuals[:, 9:10]
+    wave_phi_res = residuals[:, 10:11]
+    induction_res = residuals[:, 11:12]
     
     gauss_loss = torch.mean(gauss_res**2)
     electric_x_loss = torch.mean(electric_x_res**2)
     electric_y_loss = torch.mean(electric_y_res**2)
+    bfield_curl_A_loss = torch.mean(bfield_curl_A_res**2)
     faraday_y_loss = torch.mean(faraday_y_res**2)
     faraday_x_loss = torch.mean(faraday_x_res**2)
     ampere_z_loss = torch.mean(ampere_z_res**2)
@@ -726,12 +731,12 @@ def get_physics_loss(model, t_coll, x_coll, means, stds, rank):
     wave_phi_loss = torch.mean(wave_phi_res**2)
     induction_loss = torch.mean(induction_res**2)
     
-    physics_loss =  gauss_loss + electric_x_loss + electric_y_loss + faraday_y_loss + \
-                    faraday_x_loss + ampere_z_loss + coul_gauge_loss + wave_Ax_loss + \
-                    wave_Ay_loss + wave_phi_loss + induction_loss
+    physics_loss =  gauss_loss + electric_x_loss + electric_y_loss + bfield_curl_A_loss + \
+                    faraday_y_loss + faraday_x_loss + ampere_z_loss + coul_gauge_loss + \
+                    wave_Ax_loss + wave_Ay_loss + wave_phi_loss + induction_loss
                     
     
-    return  physics_loss, gauss_loss, electric_x_loss, electric_y_loss, \
+    return  physics_loss, gauss_loss, electric_x_loss, electric_y_loss, bfield_curl_A_loss, \
             faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
             wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss
 
@@ -757,7 +762,7 @@ def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds,
 
 def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x_coll, means, stds, rank, lamda=1.0):
     
-    physics_loss, gauss_loss, electric_x_loss, electric_y_loss, \
+    physics_loss, gauss_loss, electric_x_loss, electric_y_loss, bfield_curl_A_loss, \
     faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
     wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss = get_physics_loss(model, t_coll, x_coll, means, stds, rank)
     
@@ -765,12 +770,13 @@ def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x
     
     loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
     
-    return  loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, electric_y_loss, \
+    return  loss, sm_loss, physics_loss, \
+            gauss_loss, electric_x_loss, electric_y_loss, bfield_curl_A_loss,\
             faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
             wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss
 
 def write_loss(hist, loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, 
-               electric_y_loss, faraday_y_loss, faraday_x_loss, ampere_z_loss,
+               electric_y_loss, bfield_curl_A_loss, faraday_y_loss, faraday_x_loss, ampere_z_loss,
                coul_gauge_loss, wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss):
     
     """Writes the loss history to a dictionary"""
@@ -781,6 +787,7 @@ def write_loss(hist, loss, sm_loss, physics_loss, gauss_loss, electric_x_loss,
     hist['gauss_loss'].append(gauss_loss.item())
     hist['electric_x_loss'].append(electric_x_loss.item())
     hist['electric_y_loss'].append(electric_y_loss.item())
+    hist['bfield_cul_A_loss'].append(bfield_curl_A_loss.item())
     hist['faraday_y_loss'].append(faraday_y_loss.item())
     hist['faraday_x_loss'].append(faraday_x_loss.item())
     hist['ampere_z_loss'].append(ampere_z_loss.item())
@@ -819,7 +826,7 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             
             optimizer.zero_grad() #clear the gradients of our optimizer 
             
-            loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, electric_y_loss, \
+            loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, electric_y_loss, bfield_curl_A_loss, \
             faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
             wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss = get_total_loss(model, 
                                                                         t_sparse, x_sparse, phi_sparse, 
@@ -833,7 +840,7 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             if rank == 0:
                 hist = write_loss(
                     hist, loss, sm_loss, physics_loss, gauss_loss, electric_x_loss,
-                    electric_y_loss, faraday_y_loss, faraday_x_loss, ampere_z_loss,
+                    electric_y_loss, bfield_curl_A_loss, faraday_y_loss, faraday_x_loss, ampere_z_loss,
                     coul_gauge_loss, wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss)
             
             old_lr = get_lr(optimizer) #get the current learning rate
@@ -875,6 +882,7 @@ def plot_loss_histories(hist):
     plt.semilogy(hist['gauss_loss'], label=r'$\mathcal{L}_{Gauss}$')
     plt.semilogy(hist['electric_x_loss'], label=r'$\mathcal{L}_{Electric_x}$')
     plt.semilogy(hist['electric_y_loss'], label=r'$\mathcal{L}_{Electric_y}$')
+    plt.semilogy(hist['bfield_curl_A_loss'], label = r'mathcal{L}_{bfield_curl_A}')
     plt.semilogy(hist['faraday_y_loss'], label=r'$\mathcal{L}_{Faraday_y}$')
     plt.semilogy(hist['faraday_x_loss'], label=r'$\mathcal{L}_{Faraday_x}$')
     plt.semilogy(hist['ampere_z_loss'], label=r'$\mathcal{L}_{Ampere}$')
@@ -911,13 +919,13 @@ def plot_reconstructed_quantities(device, model, extent, Nt, Nx, means, stds):
     phi_pred = tensor_to_np(predictions[:, 0:1], reshape = True, dims = (Nt, Nx))
     Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape = True, dims = (Nt, Nx))
     Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
-    Ay_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
-    Ex_pred = tensor_to_np(predictions[:, 0:1], reshape = True, dims = (Nt, Nx))
-    Ey_pred = tensor_to_np(predictions[:, 1:2], reshape = True, dims = (Nt, Nx))
-    Bz_pred = tensor_to_np(predictions[:, 2:3], reshape = True, dims = (Nt, Nx))
-    Vx_pred = tensor_to_np(predictions[:, 3:4], reshape = True, dims = (Nt, Nx))
-    Vy_pred = tensor_to_np(predictions[:, 4:5], reshape = True, dims = (Nt, Nx))
-    N_pred = tensor_to_np(predictions[:, 5:6], reshape = True, dims = (Nt, Nx))
+    Ay_pred = tensor_to_np(predictions[:,3:4], reshape = True, dims = (Nt, Nx))
+    Ex_pred = tensor_to_np(predictions[:, 4:5], reshape = True, dims = (Nt, Nx))
+    Ey_pred = tensor_to_np(predictions[:, 5:6], reshape = True, dims = (Nt, Nx))
+    Bz_pred = tensor_to_np(predictions[:, 6:7], reshape = True, dims = (Nt, Nx))
+    Vx_pred = tensor_to_np(predictions[:, 7:8], reshape = True, dims = (Nt, Nx))
+    Vy_pred = tensor_to_np(predictions[:, 8:9], reshape = True, dims = (Nt, Nx))
+    N_pred = tensor_to_np(predictions[:, 9:10], reshape = True, dims = (Nt, Nx))
      
     
     # Plotting the reconstructed quantities
@@ -975,14 +983,15 @@ def plot_reconstructed_quantities_residuals(device, model, extent, Nt, Nx, means
     gauss_res = tensor_to_np(residuals[:, 0:1], reshape=True, dims=(Nt, Nx))
     electric_x_res = tensor_to_np(residuals[:, 1:2], reshape=True, dims=(Nt, Nx))
     electric_y_res = tensor_to_np(residuals[:, 2:3], reshape=True, dims=(Nt, Nx))
-    faraday_y_res = tensor_to_np(residuals[:, 3:4], reshape = True, dims = (Nt, Nx))
-    faraday_x_res = tensor_to_np(residuals[:, 4:5], reshape = True, dims = (Nt, Nx))
-    ampere_res = tensor_to_np(residuals[:, 5:6], reshape=True, dims=(Nt, Nx))
-    coul_gauge_res = tensor_to_np(residuals[:, 6:7], reshape=True, dims=(Nt, Nx))
-    wave_Ax_res = tensor_to_np(residuals[:, 7:8], reshape=True, dims=(Nt, Nx))
-    wave_Ay_res = tensor_to_np(residuals[:, 8:9], reshape=True, dims=(Nt, Nx))
-    wave_phi_res = tensor_to_np(residuals[:, 9:10], reshape=True, dims=(Nt, Nx))
-    induction_res = tensor_to_np(residuals[:, 10:11], reshape=True, dims=(Nt, Nx))
+    bfield_curl_A_res = tensor_to_np(residuals[:, 3:4], reshape = True, dims = (Nt, Nx))
+    faraday_y_res = tensor_to_np(residuals[:, 4:5], reshape = True, dims = (Nt, Nx))
+    faraday_x_res = tensor_to_np(residuals[:, 5:6], reshape = True, dims = (Nt, Nx))
+    ampere_res = tensor_to_np(residuals[:, 6:7], reshape=True, dims=(Nt, Nx))
+    coul_gauge_res = tensor_to_np(residuals[:, 7:8], reshape=True, dims=(Nt, Nx))
+    wave_Ax_res = tensor_to_np(residuals[:, 8:9], reshape=True, dims=(Nt, Nx))
+    wave_Ay_res = tensor_to_np(residuals[:, 9:10], reshape=True, dims=(Nt, Nx))
+    wave_phi_res = tensor_to_np(residuals[:, 10:11], reshape=True, dims=(Nt, Nx))
+    induction_res = tensor_to_np(residuals[:, 11:12], reshape=True, dims=(Nt, Nx))
     
     fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
     titles = [r'$|\partial_x E_x - n_e|$', 
@@ -998,7 +1007,7 @@ def plot_reconstructed_quantities_residuals(device, model, extent, Nt, Nx, means
               r'$|\partial_t^2 \phi - \partial_x^2 \phi + N_e|$',
               r'$|\partial_t B - \dot{B}|$']
     
-    quantities = [gauss_res, electric_x_res, electric_y_res, faraday_y_res, 
+    quantities = [gauss_res, electric_x_res, electric_y_res, bfield_curl_A_res, faraday_y_res, 
                  faraday_x_res, ampere_res, coul_gauge_res, wave_Ax_res, 
                  wave_Ay_res, wave_phi_res, induction_res]
     
@@ -1030,41 +1039,45 @@ def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, s
     with torch.no_grad():
         predictions = (model(TT_tensor, XX_tensor) * stds + means)
     
-    Ex_pred = tensor_to_np(predictions[:, 0:1], reshape=True, dims=(Nt, Nx))
-    Ey_pred = tensor_to_np(predictions[:, 1:2], reshape=True, dims=(Nt, Nx))
-    Bz_pred = tensor_to_np(predictions[:, 2:3], reshape=True, dims=(Nt, Nx))
-    Vx_pred = tensor_to_np(predictions[:, 3:4], reshape=True, dims=(Nt, Nx))
-    Vy_pred = tensor_to_np(predictions[:, 4:5], reshape=True, dims=(Nt, Nx))
-    N_pred = tensor_to_np(predictions[:, 5:6], reshape=True, dims=(Nt, Nx))
-    P_x_pred = tensor_to_np(predictions[:, 6:7], reshape=True, dims=(Nt, Nx))
-    phi_pred = tensor_to_np(predictions[:, 7:8], reshape=True, dims=(Nt, Nx))
-    Bdot_pred = tensor_to_np(predictions[:, 8:9], reshape=True, dims=(Nt, Nx))
+    phi_pred = tensor_to_np(predictions[:, 0:1], reshape=True, dims=(Nt, Nx))
+    Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape=True, dims=(Nt, Nx))
+    Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
+    Ay_pred = tensor_to_np(predictions[:,3:4], reshape = True, dims = (Nt, Nx))
+    Ex_pred = tensor_to_np(predictions[:, 4:5], reshape=True, dims=(Nt, Nx))
+    Ey_pred = tensor_to_np(predictions[:, 5:6], reshape=True, dims=(Nt, Nx))
+    Bz_pred = tensor_to_np(predictions[:, 6:7], reshape=True, dims=(Nt, Nx))
+    Vx_pred = tensor_to_np(predictions[:, 7:8], reshape=True, dims=(Nt, Nx))
+    Vy_pred = tensor_to_np(predictions[:, 8:9], reshape=True, dims=(Nt, Nx))
+    N_pred = tensor_to_np(predictions[:, 9:10], reshape=True, dims=(Nt, Nx))
+    
     
     
     #Plotting th relative errors of the reconstructed quantities
     fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
     
     rel_errors = []
-    quantities_str = [r'$E_x$', r'$E_y$', r'$B_z$', 
+    quantities_str = [r'$\phi$', 
+                     r'$\dot{B}$',
+                     r'$A_x', r'$A_y$',
+                     r'$E_x$', r'$E_y$', r'$B_z$', 
                      r'$v_x$', r'$v_y$', 
-                     r'$n_e$', 
-                     r'$\partial_{x}P$', 
-                     r'$\phi$', 
-                     r'$\dot{B}$']
-    for pred, gt, quant_str in zip([Ex_pred, Ey_pred, Bz_pred, Vx_pred, Vy_pred, N_pred, P_x_pred, phi_pred, Bdot_pred], ground_truths, quantities_str):
+                     r'$n_e$']
+    
+    for pred, gt, quant_str in zip([phi_pred, Bdot_pred, Ax_pred, Ay_pred, Ex_pred, Ey_pred, Bz_pred, Vx_pred, Vy_pred, N_pred], ground_truths, quantities_str):
         rel_error = np.sqrt(np.mean((pred - gt)**2)) / np.var(gt)
         print(f"Relative error {quant_str}: ", rel_error)
         rel_errors.append(rel_error)
     
-    error_titles = [r'$|E_x - \hat{E_x}|$', 
-                   r'$|E_y - \hat{E_y}|$',
-                   r'$|B_z - \hat{B_z}|$',
-                   r'$|v_x - \hat{v_x}|$',
-                   r'$|v_y - \hat{v_y}|$',
-                   r'$|n_e - \hat{n_e}|$',
-                   r'$|\partial_{x}P - \hat{\partial_{x}P}| $',
-                   r'$|\phi - \hat{\phi}|$',
-                   r'$|\dot{B} - \hat{\dot{B}}|$']
+    error_titles = [r'$|\phi - \hat{\phi}|$',
+                    r'$|\dot{B} - \hat{\dot{B}}|$'
+                    r'$|A_x - \hat{A_x}|$', 
+                    r'$|A_y - \hat{A_y}|$'
+                    r'$|E_x - \hat{E_x}|$', 
+                    r'$|E_y - \hat{E_y}|$',
+                    r'$|B_z - \hat{B_z}|$',
+                    r'$|v_x - \hat{v_x}|$',
+                    r'$|v_y - \hat{v_y}|$',
+                    r'$|n_e - \hat{n_e}|$']
     
     for ax, rel_error, title in zip(axes.flatten(), rel_errors, error_titles):
         im = ax.imshow(rel_error, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', cmap='bwr')
@@ -1082,6 +1095,8 @@ def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, s
 
 
 def run_ddp_training(rank, world_size, params):
+    
+    print("-----Training Model----------")
     
     #initialize the process group
     dist.init_process_group(backend = 'nccl', rank = rank, world_size = world_size)
@@ -1104,7 +1119,7 @@ def run_ddp_training(rank, world_size, params):
     # dt_val = T_wave/float(Nt) 
     # dx_val = L/float(Nx) 
     
-    X_flat_np, T_flat_np, Ex_flat_np, Ey_flat_np, Bz_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np, P_flat_np, phi_flat_np, Bdot_flat_np = generate_data(
+    X_flat_np, T_flat_np, phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Ex_flat_np, Ey_flat_np, Bz_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np  = generate_data(
         xmin, xmax, tmin, tmax, Nx, Nt, params['omega_list'], params['E_amp_list'], params['delta_list']
     )
     
@@ -1112,20 +1127,20 @@ def run_ddp_training(rank, world_size, params):
     x_coll_np, t_coll_np, dx_coll, dt_coll = collocation_points(xmin, xmax, tmin, tmax, Nx_coll, Nt_coll, L, tau)
     
     #Convert to tensors and move to correct device (rank)
-    t_sparse_tensor = np_to_tensor(t_sparse_np, device = rank, requires_grad=True)
-    x_sparse_tensor = np_to_tensor(x_sparse_np, device = rank, requires_grad=True)
-    phi_sparse_tensor = np_to_tensor(phi_sparse_np, device = rank, requires_grad=True)
-    Bdot_sparse_tensor = np_to_tensor(t_Bdotparse_np, device = rank, requires_grad=True)
+    t_sparse_tensor = np_to_tensor(t_sparse_np, reshape = True, device = rank, requires_grad=True)
+    x_sparse_tensor = np_to_tensor(x_sparse_np, reshape = True, device = rank, requires_grad=True)
+    phi_sparse_tensor = np_to_tensor(phi_sparse_np, reshape = True, device = rank, requires_grad=True)
+    Bdot_sparse_tensor = np_to_tensor(Bdot_sparse_np, reshape = True, device = rank, requires_grad=True)
     
     #Collocation points only require grad when calculating physics loss,
     # but it's safe to set here if they're always used that way.
-    t_coll_tensor = np_to_tensor(t_coll_np, device=rank, requires_grad=True)
-    x_coll_tensor = np_to_tensor(x_coll_np, device=rank, requires_grad=True)
+    t_coll_tensor = np_to_tensor(t_coll_np, reshape=True, device=rank, requires_grad=True)
+    x_coll_tensor = np_to_tensor(x_coll_np, reshape =True, device=rank, requires_grad=True)
     
     # Means and Stds for normalization (ensure these are on the correct device)
-    data_flat_GT = np.array([Ex_flat_np, Ey_flat_np, Bz_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np, P_flat_np, phi_flat_np, Bdot_flat_np])
-    means = np_to_tensor(np.mean(data_flat_GT, axis=1), reshape=True, dims=(1,9), device=rank)
-    stds = np_to_tensor(np.std(data_flat_GT, axis=1), reshape=True, dims=(1,9), device=rank)
+    data_flat_GT = np.array([phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Ex_flat_np, Ey_flat_np, Bz_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np])
+    means = np_to_tensor(np.mean(data_flat_GT, axis=1), reshape=True, dims=(1,10), device=rank)
+    stds = np_to_tensor(np.std(data_flat_GT, axis=1), reshape=True, dims=(1,10), device=rank)
     
     # Initialize Model for this process
     model = MLP(
@@ -1136,8 +1151,7 @@ def run_ddp_training(rank, world_size, params):
         activation=params['activation'],
         init=params['init'],
         input_encoding=params['input_encoding'],
-        sigma=params['sigma'],
-        output_size=9 # Model should output 9 quantities for x-wave problem
+        sigma=params['sigma']
     ).to(rank) # Move model to assigned GPU
     
     #Wrap the model with DDP
@@ -1149,10 +1163,11 @@ def run_ddp_training(rank, world_size, params):
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=100, min_lr=1e-8, verbose=True)
     
     hist = {
-        'total_loss': [], 'sm_loss': [], 'physics_loss': [],
-        'gauss_loss': [], 'faraday_loss': [], 'ampere_loss': [],
-        'continuity_loss': [], 'momentum_x_loss': [], 'momentum_y_loss': [],
-        'adiabatic_loss': [], 'electrostatic_loss': [], 'induction_loss': []
+        'loss': [], 'sm_loss': [], 'physics_loss': [],
+        'gauss_loss': [], 'electric_x_loss': [], 'electric_y_loss': [],
+        'bfield_cul_A_loss': [], 'faraday_y_loss': [], 'faraday_x_loss': [],
+        'ampere_z_loss': [], 'coul_gauge_loss':[], 'wave_Ax_loss': [], 'wave_Ay_loss': [],
+        'wave_phi_loss':[], 'induction_loss':[]
     }
     
     # Optimize the model
@@ -1204,17 +1219,17 @@ if __name__ == '__main__':
     T_wave_init = (2 * np.pi) / omega_list[0]
     
     xmin_init, xmax_init = 0, 3 * lamda_wave_init
-    tmin_init, tmax_init = 0, 3 * T_wave_init
+    tmin_init, tmax_init = 0, 3 * T_wave_init   
 
     params = {
         'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
         'num_hidden_layers': 5,
         'hidden_size': 50,
-        'activation': 'tanh',
+        'activation': 'sin',
         'init': 'xavier',
         'input_encoding': True,
         'sigma': 1.0,
-        'output_size': 9, 
+        'output_size': 10, 
 
         # Training parameters
         'num_epochs': 2000,
