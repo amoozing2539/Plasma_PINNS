@@ -673,16 +673,16 @@ def pde_residuals(model, t, x, means, stds):
         
         #Don't need derivatives for Vx, Vy, N, or Bdot
         
-        residuals[:, 0:1] = Ex_x - N #Gauss x
-        residuals[:, 1:2] = Ex + phi_x + Ax_t #electrostatic x
-        residuals[:, 2:3] = Ey + Ay_t #electrostatic y
-        residuals[:, 3:4] = -Bz_x + Vy - Ey_t #Faraday's y
-        residuals[:, 4:5] = Vx + Ex_t #Faraday's x
-        residuals[:, 5:6] = Ey_x + Bdot #Ampere's z
-        residuals[:, 6:7] = Ax_x + phi_t #Coulomb Gauge x
-        residuals[:, 7:8] = Ax_tt - Ax_xx + Vx #Wave Ax 
-        residuals[:, 8:9] = Ay_tt + Vy #wave Ay 
-        residuals[:, 9:10] = phi_tt - phi_xx + N #Wave phi
+        residuals[:, 0:1] = Ex_x - N                  #Gauss x
+        residuals[:, 1:2] = Ex + phi_x + Ax_t         #electrostatic x
+        residuals[:, 2:3] = Ey + Ay_t                 #electrostatic y
+        residuals[:, 3:4] = -Bz_x + Vy - Ey_t         #Faraday's y
+        residuals[:, 4:5] = Vx + Ex_t                 #Faraday's x
+        residuals[:, 5:6] = Ey_x + Bdot               #Ampere's z
+        residuals[:, 6:7] = Ax_x + phi_t              #Coulomb Gauge x
+        residuals[:, 7:8] = Ax_tt - Ax_xx + Vx        #Wave Ax 
+        residuals[:, 8:9] = Ay_tt + Vy                #wave Ay 
+        residuals[:, 9:10] = phi_tt - phi_xx + N      #Wave phi
         residuals[:, 10:11] = Bz_t + Bdot
         
     else:
@@ -703,28 +703,37 @@ def get_physics_loss(model, t_coll, x_coll, means, stds, rank):
     residuals = pde_residuals(model, t_coll, x_coll, means, stds)
     
     gauss_res = residuals[:, 0:1]
-    faraday_res = residuals[:, 1:2]
-    ampere_res = residuals[:, 2:3]
-    continuity_res = residuals[:, 3:4]
-    momentum_x_res = residuals[:, 4:5]
-    momentum_y_res = residuals[:, 5:6]
-    adiabatic_res = residuals[:, 6:7]
-    electrostatic_res = residuals[:, 7:8]
-    induction_res = residuals[:, 8:9]
+    electric_x_res = residuals[:, 1:2]
+    electric_y_res = residuals[:, 2:3]
+    faraday_y_res = residuals[:, 3:4]
+    faraday_x_res = residuals[:, 4:5]
+    ampere_z_res = residuals[:, 5:6]
+    coul_gauge_res = residuals[:, 6:7]
+    wave_Ax_res = residuals[:, 7:8]
+    wave_Ay_res = residuals[:, 8:9]
+    wave_phi_res = residuals[:, 9:10]
+    induction_res = residuals[:, 10:11]
     
     gauss_loss = torch.mean(gauss_res**2)
-    faraday_loss = torch.mean(faraday_res**2)
-    ampere_loss = torch.mean(ampere_res**2)
-    continuity_loss = torch.mean(continuity_res**2)
-    momentum_x_loss = torch.mean(momentum_x_res**2)
-    momentum_y_loss = torch.mean(momentum_y_res**2)
-    adiabatic_loss = torch.mean(adiabatic_res**2)
-    electrostatic_loss = torch.mean(electrostatic_res**2)
+    electric_x_loss = torch.mean(electric_x_res**2)
+    electric_y_loss = torch.mean(electric_y_res**2)
+    faraday_y_loss = torch.mean(faraday_y_res**2)
+    faraday_x_loss = torch.mean(faraday_x_res**2)
+    ampere_z_loss = torch.mean(ampere_z_res**2)
+    coul_gauge_loss = torch.mean(coul_gauge_res**2)
+    wave_Ax_loss = torch.mean(wave_Ax_res**2)
+    wave_Ay_loss = torch.mean(wave_Ay_res**2)
+    wave_phi_loss = torch.mean(wave_phi_res**2)
     induction_loss = torch.mean(induction_res**2)
     
-    physics_loss = gauss_loss + faraday_loss + ampere_loss + continuity_loss + momentum_x_loss + momentum_y_loss + adiabatic_loss + electrostatic_loss + induction_loss
+    physics_loss =  gauss_loss + electric_x_loss + electric_y_loss + faraday_y_loss + \
+                    faraday_x_loss + ampere_z_loss + coul_gauge_loss + wave_Ax_loss + \
+                    wave_Ay_loss + wave_phi_loss + induction_loss
+                    
     
-    return physics_loss, gauss_loss, faraday_loss, ampere_loss, continuity_loss, momentum_x_loss, momentum_y_loss, adiabatic_loss, electrostatic_loss, induction_loss
+    return  physics_loss, gauss_loss, electric_x_loss, electric_y_loss, \
+            faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
+            wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss
 
 
 def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank):
@@ -748,30 +757,38 @@ def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds,
 
 def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x_coll, means, stds, rank, lamda=1.0):
     
-    physics_loss, gauss_loss, faraday_loss, ampere_loss, continuity_loss, momentum_x_loss, momentum_y_loss, adiabatic_loss, electrostatic_loss, induction_loss = get_physics_loss(model, t_coll, x_coll, means, stds, rank)
+    physics_loss, gauss_loss, electric_x_loss, electric_y_loss, \
+    faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
+    wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss = get_physics_loss(model, t_coll, x_coll, means, stds, rank)
     
     sm_loss = get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank)
     
-    loss = sm_loss + lamda * physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
+    loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
     
-    return loss, sm_loss, physics_loss, gauss_loss, faraday_loss, ampere_loss, continuity_loss, momentum_x_loss, momentum_y_loss, adiabatic_loss, electrostatic_loss, induction_loss
+    return  loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, electric_y_loss, \
+            faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
+            wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss
 
-def write_loss(hist, loss, sm_loss, physics_loss, gauss_loss, faraday_loss, ampere_loss, continuity_loss, momentum_x_loss, momentum_y_loss, adiabatic_loss, electrostatic_loss, induction_loss):
+def write_loss(hist, loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, 
+               electric_y_loss, faraday_y_loss, faraday_x_loss, ampere_z_loss,
+               coul_gauge_loss, wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss):
+    
     """Writes the loss history to a dictionary"""
     
     hist['loss'].append(loss.item())
     hist['sm_loss'].append(sm_loss.item())
     hist['physics_loss'].append(physics_loss.item())
     hist['gauss_loss'].append(gauss_loss.item())
-    hist['faraday_loss'].append(faraday_loss.item())
-    hist['ampere_loss'].append(ampere_loss.item())
-    hist['continuity_loss'].append(continuity_loss.item())
-    hist['momentum_x_loss'].append(momentum_x_loss.item())
-    hist['momentum_y_loss'].append(momentum_y_loss.item())
-    hist['adiabatic_loss'].append(adiabatic_loss.item())
-    hist['electrostatic_loss'].append(electrostatic_loss.item())
+    hist['electric_x_loss'].append(electric_x_loss.item())
+    hist['electric_y_loss'].append(electric_y_loss.item())
+    hist['faraday_y_loss'].append(faraday_y_loss.item())
+    hist['faraday_x_loss'].append(faraday_x_loss.item())
+    hist['ampere_z_loss'].append(ampere_z_loss.item())
+    hist['coul_gauge_loss'].append(coul_gauge_loss.item())
+    hist['wave_Ax_loss'].append(wave_Ax_loss.item())
+    hist['wave_Ay_loss'].append(wave_Ay_loss.item())
+    hist['wave_phi_loss'].append(wave_phi_loss.item())
     hist['induction_loss'].append(induction_loss.item())
-    
     
     return hist
 
@@ -802,12 +819,12 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             
             optimizer.zero_grad() #clear the gradients of our optimizer 
             
-            loss, sm_loss, physics_loss, gauss_loss, faraday_loss, ampere_loss, \
-            continuity, momentum_x_loss, momentum_y_loss, adiabatic_loss, \
-            electrostatic_loss, induction_loss = get_total_loss(
-                model, t_sparse, x_sparse, phi_sparse, Bdot_sparse,
-                t_coll, x_coll, means, stds, rank, lamda
-            )
+            loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, electric_y_loss, \
+            faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
+            wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss = get_total_loss(model, 
+                                                                        t_sparse, x_sparse, phi_sparse, 
+                                                                        Bdot_sparse, t_coll, x_coll, means, stds, 
+                                                                        rank, lamda)
             
             loss.backward() #calculate the gradients of the loss w.r.t. the model parameters. Backwards pass
             optimizer.step() #update the model parameters using the optimizer *magic*
@@ -815,11 +832,9 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             #update our loss history only for rank 0 
             if rank == 0:
                 hist = write_loss(
-                    hist, loss, sm_loss, physics_loss, gauss_loss, faraday_loss,
-                    ampere_loss, continuity, momentum_x_loss, momentum_y_loss,
-                    adiabatic_loss, electrostatic_loss, induction_loss
-                
-                )
+                    hist, loss, sm_loss, physics_loss, gauss_loss, electric_x_loss,
+                    electric_y_loss, faraday_y_loss, faraday_x_loss, ampere_z_loss,
+                    coul_gauge_loss, wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss)
             
             old_lr = get_lr(optimizer) #get the current learning rate
             scheduler.step(loss) #update the learning rate using the scheduler based on the loss
@@ -858,13 +873,15 @@ def plot_loss_histories(hist):
     plt.ylabel("Loss (arbitrary units)")
     
     plt.semilogy(hist['gauss_loss'], label=r'$\mathcal{L}_{Gauss}$')
-    plt.semilogy(hist['faraday_loss'], label=r'$\mathcal{L}_{Faraday}$')
-    plt.semilogy(hist['ampere_loss'], label=r'$\mathcal{L}_{Ampere}$')
-    plt.semilogy(hist['continuity_loss'], label=r'$\mathcal{L}_{Continuity}$')
-    plt.semilogy(hist['momentum_x_loss'], label=r'$\mathcal{L}_{Momentum_x}$')
-    plt.semilogy(hist['momentum_y_loss'], label=r'$\mathcal{L}_{Momentum_y}$')
-    plt.semilogy(hist['adiabatic_loss'], label=r'$\mathcal{L}_{Adiabatic}$')
-    plt.semilogy(hist['electrostatic_loss'], label=r'$\mathcal{L}_{Electrostatic}$')
+    plt.semilogy(hist['electric_x_loss'], label=r'$\mathcal{L}_{Faraday}$')
+    plt.semilogy(hist['electric_y_loss'], label=r'$\mathcal{L}_{Ampere}$')
+    plt.semilogy(hist['faraday_y_loss'], label=r'$\mathcal{L}_{Continuity}$')
+    plt.semilogy(hist['faraday_x_loss'], label=r'$\mathcal{L}_{Momentum_x}$')
+    plt.semilogy(hist['ampere_z_loss'], label=r'$\mathcal{L}_{Momentum_y}$')
+    plt.semilogy(hist['coul_gauge_loss'], label=r'$\mathcal{L}_{Adiabatic}$')
+    plt.semilogy(hist['wave_Ax_loss'], label=r'$\mathcal{L}_{Electrostatic}$')
+    plt.semilogy(hist['wave_Ay_loss'], label=r'$\mathcal{L}_{Electrostatic}$')
+    plt.semilogy(hist['wave_phi_loss'], label=r'$\mathcal{L}_{Electrostatic}$')
     plt.semilogy(hist['induction_loss'], label=r'$\mathcal{L}_{Induction}$')    
     
     plt.legend()
