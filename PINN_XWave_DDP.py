@@ -311,30 +311,30 @@ def derivative_t(f, dt):
 
 #Ground Truth Values
 quantities_flat = [phi_flat, Bdot_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat]
+extent_GT = [xmin, xmax, tmin, tmax]
 quantities_GT = [x.reshape(Nt, Nx) for x in quantities_flat]
-titles_analytical = 
+titles_GT = [f'$\phi [\\frac{{m_{{e}}c^2}}{{e}}]$', 
+            f'$\dot{{B}} [\\frac{{e}}{{m_{{e}}c}}]$',
+            f'$A_x [\\frac{{m_{{e}}c^2}}{{e}}]',
+            f'$A_y [\\frac{{m_{{e}}c^2}}{{e}}]',
+            f'$E_x [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (longitudinal)', 
+            f'$E_y [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (transverse)', 
+            f'$B_z [\\frac{{e}}{{m_{{e}}c\\omega_{{pe}}}}]$',
+            f'$v_x [c]$', 
+            f'$v_y [c]$', 
+            f'$N_e [n_0]$']
 
 
 #Plot GTs
 def plot_analytical(quantities, titles, extent):
     """Plot the analytical solution."""
-    titles = [f'$E_x [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (longitudinal)', 
-              f'$E_y [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (transverse)', 
-              f'$B_z [\\frac{{e}}{{m_{{e}}c\\omega_{{pe}}}}]$',
-              f'$v_x [c]$', f'$v_y [c]$', 
-             f'$n_e [n_0]$', 
-             f'$\\nabla P_x [n_0m_e\\omega_{{pe}}c]$',
-             f'$\phi [\\frac{{m_{{e}}c^2}}{{e}}]$', 
-             f'$\dot{{B}} [\\frac{{e}}{{m_{{e}}c}}]$']
-    extent = [xmin, xmax, tmin, tmax]
     
-    fig, axes = plt.subplots(3, 3, figsize=(25, 25))
-    quantities = [Ex_GT, Ey_GT, Bz_GT, 
-                  Vx_GT, Vy_GT, N_GT, 
-                  P_x_GT, phi_GT, Bdot_GT]
+    
+    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
     colors = ['PiYG', 'PRGn', 'BrBG',
               'PuOr', 'RdGy', 'RdBu',
-              'RdYlBu', 'RdYlGn', 'bwr']
+              'RdYlBu', 'RdYlGn', 'bwr',
+              'seismic', 'berlin', 'vanimo']
                       
     for ax, quantity, title, color in zip(axes.flatten(), quantities, titles, colors):
         im = ax.imshow(quantity, aspect='auto', extent=extent, origin='lower', cmap=color)
@@ -355,65 +355,84 @@ def plot_analytical(quantities, titles, extent):
     plt.show()
     plt.suptitle("Ground Truth")
     plt.savefig("XWave_Ground_Truth_Plots")
-    
-plot_analytical()
+
+#Plot Ground Truth Values
+print("-------Plotting Ground Truth Values-------------")
+plot_analytical(quantities=quantities_GT, titles = titles_GT, extent = extent_GT)
 
 
 #Plot constraints
-P_x = P_x_GT
-N = N_GT
-Ex = Ex_GT
-Bdot = Bdot_GT
-
-Ex_x = derivative_x(Ex_GT, dx)
-Ey_x = derivative_x(Ey_GT, dx)
-Bz_x = derivative_x(Bz_GT, dx)
-curl_E = Ey_x
-curl_B = -Bz_x
-
-Ex_t = derivative_t(Ex_GT, dt)
-Ey_t = derivative_t(Ey_GT, dt)
-Bz_t = derivative_t(Bz_GT, dt)
-
-N_t = derivative_t(N_GT, dt)
-N_x = derivative_x(N_GT, dx)
-
-Vx_x = derivative_x(Vx_GT, dx)
-Vx_t = derivative_t(Vx_GT, dt)
-Vy_t = derivative_t(Vy_GT, dt)
-
-Phi_x = derivative_x(phi_GT, dx)
-
-gauss_x = Ex_x - N_GT #1
-faraday_x = curl_E - Bz_t #2
-ampere_y = curl_B + Vy_t - Ey_t #3
-continuity = N_t + Vx_x #4
-momentum_x = Vx_t + Ex_x + P_x #5
-momentum_y = Vy_t + Ey_x #6
-adiabatic = P_x - 3*(vth**2)*N_x*(N**2) #7
-electrostatic = Phi_x + Ex #8
-dbdt = Bz_t + Bdot #9
+phi = quantities_GT[0]
+Bdot= quantities_GT[1]
+Ax = quantities_GT[2]
+Ay = quantities_GT[3]
+Ex = quantities_GT[4]
+Ey = quantities_GT[5]
+Bz = quantities_GT[6]
+Vx = quantities_GT[7]
+Vy = quantities_GT[8]
+N = quantities_GT[9]
 
 
+phi_x = derivative_x(phi, dx)
+phi_xx = derivative_x(phi_x, dx)
+phi_t = derivative_t(phi, dt)
+phi_tt = derivative_t(phi_t, dt)
 
-def plot_constraints():
+Ax_x = derivative_x(Ax, dx)
+Ax_xx = derivative_x(Ax_x, dx)
+Ax_t = derivative_t(Ax, dt)
+Ax_tt = derivative_t(Ax_t, dt)
+Ay_x = derivative_x(Ay, dx)
+Ay_xx = derivative_x(Ay_x, dx)
+Ay_t = derivative_t(Ay, dt)
+Ay_tt = derivative_t(Ay_t, dt)
+
+Ex_x = derivative_x(Ex, dx)
+Ex_t = derivative_t(Ex, dt)
+Ey_x = derivative_x(Ey, dx)
+Ey_t = derivative_t(Ey, dt)
+
+Bz_x = derivative_x(Bz, dx)
+Bz_t = derivative_t(Bz, dt)
+
+gauss_x = Ey_x - N
+electric_field_x = Ex + phi_x + Ax_t
+electric_field_y = Ey + Ay_t
+Bfield_curl_A = Bz - Ay_x
+faraday_y = -Bz_x + Vy + Ey_t
+faraday_x = Vx + Ex_t
+ampere_z = Ey_x + Bdot
+coul_gauge_x = Ax_x + phi_t
+wave_A_x = Ax_tt - Ax_xx + Vx
+wave_A_y = Ay_tt + Vy
+wave_phi = phi_tt - phi_xx + N
+Bdot_def = Bz_t - Bdot
+
+constraints_ext = [x_arr[1], x_arr[-2], t_arr[1], t_arr[-2]]
+constraints = [gauss_x, electric_field_x, electric_field_y, Bfield_curl_A,
+               faraday_y, faraday_x, ampere_z, coul_gauge_x,
+               wave_A_x, wave_A_y, wave_phi, Bdot_def]
+constraint_titles = [f'$|\\partial_x E_y - N_e|$', 
+          f'$|E_x + \\phi_x + \\partial_t A_x|$',
+          f'$|E_y + \\partial_t A_y|$',
+          f'$|B_z - \\partial_x A_y|$',
+          f'$|-\\partial_x B_z + V_y + \\partial_t E_y|$',
+          f'$|V_x + \\partial_t E_x|$',
+          f"$|\\partial_x E_y + \\dot{{B}}|$",
+          f'$|\\partial_x A_x + \\partial_t \\phi|$',
+          f'$|\\partial_{{t}}^{{2}} A_x - \\partial_{{x}}^{{2}} A_x + V_x|$',
+          f'$|\\partial_{{t}}^{{2}} A_y + V_y|$',
+          f'$|\\partial_{{t}}^{{2}} \\phi - \\partial_{{x}}^{{x}} \\phi + N_e|$',
+          f'$|\\partial_t B - \\dot{{B}}|']
+
+
+def plot_constraints(constraints, titles, extent):
     "Plots the constraints in their current form."
-    titles = [f'$|\\partial_x E_x - n_e|$', 
-              f'$|\\partial_x E_y - \\partial_t B_z|$', 
-              f'$|-\\partial_x B_z + \\partial_t v_y - \\partial_t E_y|$',
-              f'$|\\partial_t n_e + \\partial_x v_x|$', 
-              f'$|\\partial_t v_x + \\partial_x E_x + \\partial_x P_e|$', 
-              f'$|\\partial_t v_y \\partial_x E_y|$', 
-              f'$|\\partial_x P_e - 3 v_{{th}}^{{2}} \\partial_x n_e n_e^{{2}}|$',
-              f'$|\\partial_x \\phi + E_x|$', 
-              f'$|\\partial_t B_z + \\dot{{B}}|$']
-    
-    ext = [x_arr[1], x_arr[-2], t_arr[1], t_arr[-2]]
-    constraints = [gauss_x, faraday_x, ampere_y, continuity, momentum_x, momentum_y, adiabatic, electrostatic, dbdt]
     fig, axes = plt.subplots(3, 3, figsize=(20, 20))
     
     for ax, constraint, title in zip(axes.flatten(), constraints, titles):
-        im = ax.imshow(constraint, aspect='auto', extent=ext, origin='lower', cmap='Reds')
+        im = ax.imshow(constraint, aspect='auto', extent=extent, origin='lower', cmap='Reds')
         ax.set_title(title, fontsize = 15)
         ax.set_xlabel(f'$x [\\frac{{c}}{{\omega_{{pe}}}}]$')
         ax.set_ylabel('$t [\\omega_{{pe}}^{{-1}}]$')
@@ -423,8 +442,9 @@ def plot_constraints():
     plt.show()
     plt.savefig("XWave_Constraints.png")
     
-plot_constraints()
-    
+print("------Plotting Constraints as is--------------")
+plot_constraints(constraints = constraints, titles = constraint_titles, extent=constraints_ext)
+
 
 # Helper functions for initialization of network parameters
 
@@ -508,7 +528,7 @@ class MLP(nn.Module):
         if single_output:
             self.output_size = 1
         else:
-            self.output_size = 9 # 9 outputs: Ex, Ey, Bz, Vx, Vy, N, P_x, phi, Bdot
+            self.output_size = 10 # 9 outputs: phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N
               
         if activation == 'tanh' or activation == 'Tanh':
             self.activation_fn = Tanh(device, adaptive=adaptive_af)
@@ -616,17 +636,19 @@ def pde_residuals(model, t, x, means, stds):
         
     residuals = torch.zeros(t.size(dim=0), 9).to(t.device)
     
-    Ex, Ey, Bz, Vx, Vy, N, P_x, phi, Bdot = (model(t, x)* stds + means).T
+    phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N = (model(t, x)* stds + means).T
     
+    phi = phi.reshape(-1, 1)
+    Bdot = Bdot.reshape(-1, 1)
+    Ax = Ax.reshape(-1,1)
+    Ay = Ay.reshape(-1,1)
     Ex = Ex.reshape(-1, 1)
     Ey = Ey.reshape(-1, 1)
     Bz = Bz.reshape(-1, 1)
     Vx = Vx.reshape(-1, 1)
     Vy = Vy.reshape(-1, 1)
     N = N.reshape(-1, 1)
-    P_x = P_x.reshape(-1, 1)
-    phi = phi.reshape(-1, 1)
-    Bdot = Bdot.reshape(-1, 1)
+    
     
     if grad_enabled:
         Ex_t = grad(Ex, t, grad_outputs=torch.ones_like(Ex), create_graph=True)[0]
