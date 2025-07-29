@@ -652,6 +652,7 @@ def pde_residuals(model, t, x, means, stds):
     
     
     if grad_enabled:
+        
         phi_x = grad(phi, x, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
         phi_xx = grad(phi_x, x, grad_outputs=torch.ones_like(phi_x), create_graph=True)[0]
         phi_t = grad(phi, t, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
@@ -661,7 +662,9 @@ def pde_residuals(model, t, x, means, stds):
         Ax_xx = grad(Ax_x, x, grad_outputs=torch.ones_like(Ax_x), create_graph=True)[0]
         Ax_t = grad(Ax, t, grad_outputs=torch.ones_like(Ax), create_graph=True)[0]
         Ax_tt = grad(Ax_t, t, grad_outputs=torch.ones_like(Ax_t), create_graph=True)[0]
+        
         Ay_x = grad(Ay, x, grad_outputs=torch.ones_like(Ay), create_graph=True)[0]
+        Ay_xx = grad(Ay_x, x, grad_outputs=torch.ones_like(Ay_x), create_graph=True)[0]
         Ay_t = grad(Ay, t, grad_outputs=torch.ones_like(Ay), create_graph=True)[0]
         Ay_tt = grad(Ay_t, t, grad_outputs=torch.ones_like(Ay_t), create_graph=True)[0]
         
@@ -676,17 +679,17 @@ def pde_residuals(model, t, x, means, stds):
         #Don't need derivatives for Vx, Vy, N, or Bdot
         
         residuals[:, 0:1] = Ex_x - N                  #Gauss x
-        residuals[:, 1:2] = Bz - Ay_t                 #bfield curl A
-        residuals[:, 2:3] = Ex + phi_x + Ax_t         #electrostatic x
-        residuals[:, 3:4] = Ey + Ay_t                 #electrostatic y
-        residuals[:, 4:5] = -Bz_x + Vy - Ey_t         #Faraday's y
-        residuals[:, 5:6] = Vx + Ex_t                 #Faraday's x
+        residuals[:, 1:2] = Ex + phi_x + Ax_t         #electrostatic x
+        residuals[:, 2:3] = Ey + Ay_t                 #electrostatic y
+        residuals[:, 3:4] = Bz - Ay_x                 #bfield curl A
+        residuals[:, 4:5] = -Bz_x + Vy + Ey_t         #Faraday's y
+        residuals[:, 5:6] = Vx - Ex_t                 #Faraday's x
         residuals[:, 6:7] = Ey_x + Bdot               #Ampere's z
         residuals[:, 7:8] = Ax_x + phi_t              #Coulomb Gauge x
         residuals[:, 8:9] = Ax_tt - Ax_xx + Vx        #Wave Ax 
-        residuals[:, 9:10] = Ay_tt + Vy               #wave Ay 
+        residuals[:, 9:10] = Ay_tt - Ay_xx + Vy       #wave Ay 
         residuals[:, 10:11] = phi_tt - phi_xx + N     #Wave phi
-        residuals[:, 11:12] = Bz_t + Bdot             #induction
+        residuals[:, 11:12] = Bz_t - Bdot             #induction
         
     else:
         residuals.fill_(0.0)  # If gradients are not enabled, set residuals to zero
@@ -1140,7 +1143,7 @@ def run_ddp_training(rank, world_size, params):
     # Means and Stds for normalization (ensure these are on the correct device)
     data_flat_GT = np.array([phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Ex_flat_np, Ey_flat_np, Bz_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np])
     means = np_to_tensor(np.mean(data_flat_GT, axis=1), reshape=True, dims=(1,10), device=rank)
-    stds = np_to_tensor(np.std(data_flat_GT, axis=1), reshape=True, dims=(1,10), device=rank)
+    stds = np_to_tensor(np.std(data_flat_GT, axis=1) + 1e-8, reshape=True, dims=(1,10), device=rank) #epsilon to prevent division by zero. 
     
     # Initialize Model for this process
     model = MLP(
@@ -1225,7 +1228,7 @@ if __name__ == '__main__':
         'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
         'num_hidden_layers': 5,
         'hidden_size': 50,
-        'activation': 'sin',
+        'activation': 'tanh',
         'init': 'xavier',
         'input_encoding': True,
         'sigma': 1.0,
