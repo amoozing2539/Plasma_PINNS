@@ -651,28 +651,39 @@ def pde_residuals(model, t, x, means, stds):
     
     
     if grad_enabled:
-        Ex_t = grad(Ex, t, grad_outputs=torch.ones_like(Ex), create_graph=True)[0]
+        phi_x = grad(phi, x, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+        phi_xx = grad(phi_x, x, grad_outputs=torch.ones_like(phi_x), create_graph=True)[0]
+        phi_t = grad(phi, t, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
+        phi_tt = grad(phi_t, t, grad_outputs=torch.ones_like(phi_t), create_graph=True)[0]
+        
+        Ax_x = grad(Ax, x, grad_outputs=torch.ones_like(Ax), create_graph=True)[0]
+        Ax_xx = grad(Ax_x, x, grad_outputs=torch.ones_like(Ax_x), create_graph=True)[0]
+        Ax_t = grad(Ax, t, grad_outputs=torch.ones_like(Ax), create_graph=True)[0]
+        Ax_tt = grad(Ax_t, t, grad_outputs=torch.ones_like(Ax_t), create_graph=True)[0]
+        Ay_x = grad(Ay, x, grad_outputs=torch.ones_like(Ay), create_graph=True)[0]
+        Ay_tt = grad(Ay_t, grad_outputs=torch.ones_like(Ay_t), create_graph=True)[0]
+        
         Ex_x = grad(Ex, x, grad_outputs=torch.ones_like(Ex), create_graph=True)[0]
+        Ex_t = grad(Ex, t, grad_outputs=torch.ones_like(Ex), create_graph=True)[0]
         Ey_x = grad(Ey, x, grad_outputs=torch.ones_like(Ey), create_graph=True)[0]
         Ey_t = grad(Ey, t, grad_outputs=torch.ones_like(Ey), create_graph=True)[0]
+        
         Bz_x = grad(Bz, x, grad_outputs=torch.ones_like(Bz), create_graph=True)[0]
         Bz_t = grad(Bz, t, grad_outputs=torch.ones_like(Bz), create_graph=True)[0]
-        Vx_x = grad(Vx, x, grad_outputs=torch.ones_like(Vx), create_graph=True)[0]
-        Vx_t = grad(Vx, t, grad_outputs=torch.ones_like(Vx), create_graph=True)[0]
-        Vy_t = grad(Vy, t, grad_outputs=torch.ones_like(Vy), create_graph=True)[0]
-        N_t = grad(N, t, grad_outputs=torch.ones_like(N), create_graph=True)[0]
-        N_x = grad(N, x, grad_outputs=torch.ones_like(N), create_graph=True)[0]
-        phi_x = grad(phi, x, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
         
-        residuals[:, 0:1] = Ex_x - N  # Gauss's Law
-        residuals[:, 1:2] = Ey_x - Bz_t  # Faraday's Law
-        residuals[:, 2:3] = -Bz_x + Vy_t - Ey_t  # Ampere's Law
-        residuals[:, 3:4] = N_t + Vx_x  # Continuity Equation
-        residuals[:, 4:5] = Vx_t + Ex_x + P_x  # Momentum Equation in x-direction
-        residuals[:, 5:6] = Vy_t + Ey_x  # Momentum Equation in y-direction
-        residuals[:, 6:7] = P_x - 3 * (vth ** 2) * N_x * (N ** 2)  # Adiabatic Equation
-        residuals[:, 7:8] = phi_x + Ex  # Electrostatic Equation
-        residuals[:, 8:9] = Bz_t + Bdot  # Induction Equation
+        #Don't need derivatives for Vx, Vy, N, or Bdot
+        
+        residuals[:, 0:1] = Ex_x - N #Gauss x
+        residuals[:, 1:2] = Ex + phi_x + Ax_t #electrostatic x
+        residuals[:, 2:3] = Ey + Ay_t #electrostatic y
+        residuals[:, 3:4] = -Bz_x + Vy - Ey_t #Faraday's y
+        residuals[:, 4:5] = Vx + Ex_t #Faraday's x
+        residuals[:, 5:6] = Ey_x + Bdot #Ampere's z
+        residuals[:, 6:7] = Ax_x + phi_t #Coulomb Gauge x
+        residuals[:, 7:8] = Ax_tt - Ax_xx + Vx #Wave Ax 
+        residuals[:, 8:9] = Ay_tt + Vy #wave Ay 
+        residuals[:, 9:10] = phi_tt - phi_xx + N #Wave phi
+        residuals[:, 10:11] = Bz_t + Bdot
         
     else:
         residuals.fill_(0.0)  # If gradients are not enabled, set residuals to zero
