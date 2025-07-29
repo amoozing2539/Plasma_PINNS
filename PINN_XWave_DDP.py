@@ -429,7 +429,7 @@ constraint_titles = [f'$|\\partial_x E_y - N_e|$',
 
 def plot_constraints(constraints, titles, extent):
     "Plots the constraints in their current form."
-    fig, axes = plt.subplots(3, 3, figsize=(20, 20))
+    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(20, 20))
     
     for ax, constraint, title in zip(axes.flatten(), constraints, titles):
         im = ax.imshow(constraint, aspect='auto', extent=extent, origin='lower', cmap='Reds')
@@ -873,15 +873,15 @@ def plot_loss_histories(hist):
     plt.ylabel("Loss (arbitrary units)")
     
     plt.semilogy(hist['gauss_loss'], label=r'$\mathcal{L}_{Gauss}$')
-    plt.semilogy(hist['electric_x_loss'], label=r'$\mathcal{L}_{Faraday}$')
-    plt.semilogy(hist['electric_y_loss'], label=r'$\mathcal{L}_{Ampere}$')
-    plt.semilogy(hist['faraday_y_loss'], label=r'$\mathcal{L}_{Continuity}$')
-    plt.semilogy(hist['faraday_x_loss'], label=r'$\mathcal{L}_{Momentum_x}$')
-    plt.semilogy(hist['ampere_z_loss'], label=r'$\mathcal{L}_{Momentum_y}$')
-    plt.semilogy(hist['coul_gauge_loss'], label=r'$\mathcal{L}_{Adiabatic}$')
-    plt.semilogy(hist['wave_Ax_loss'], label=r'$\mathcal{L}_{Electrostatic}$')
-    plt.semilogy(hist['wave_Ay_loss'], label=r'$\mathcal{L}_{Electrostatic}$')
-    plt.semilogy(hist['wave_phi_loss'], label=r'$\mathcal{L}_{Electrostatic}$')
+    plt.semilogy(hist['electric_x_loss'], label=r'$\mathcal{L}_{Electric_x}$')
+    plt.semilogy(hist['electric_y_loss'], label=r'$\mathcal{L}_{Electric_y}$')
+    plt.semilogy(hist['faraday_y_loss'], label=r'$\mathcal{L}_{Faraday_y}$')
+    plt.semilogy(hist['faraday_x_loss'], label=r'$\mathcal{L}_{Faraday_x}$')
+    plt.semilogy(hist['ampere_z_loss'], label=r'$\mathcal{L}_{Ampere}$')
+    plt.semilogy(hist['coul_gauge_loss'], label=r'$\mathcal{L}_{Coulomb Gauge}$')
+    plt.semilogy(hist['wave_Ax_loss'], label=r'$\mathcal{L}_{Ax Wave}$')
+    plt.semilogy(hist['wave_Ay_loss'], label=r'$\mathcal{L}_{Ay Wave}$')
+    plt.semilogy(hist['wave_phi_loss'], label=r'$\mathcal{L}_{\phi Wave}$')
     plt.semilogy(hist['induction_loss'], label=r'$\mathcal{L}_{Induction}$')    
     
     plt.legend()
@@ -908,34 +908,39 @@ def plot_reconstructed_quantities(device, model, extent, Nt, Nx, means, stds):
         model.eval()
         predictions = (model(TT_tensor, XX_tensor) * stds + means) #model predictions
     
+    phi_pred = tensor_to_np(predictions[:, 0:1], reshape = True, dims = (Nt, Nx))
+    Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape = True, dims = (Nt, Nx))
+    Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
+    Ay_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
     Ex_pred = tensor_to_np(predictions[:, 0:1], reshape = True, dims = (Nt, Nx))
     Ey_pred = tensor_to_np(predictions[:, 1:2], reshape = True, dims = (Nt, Nx))
     Bz_pred = tensor_to_np(predictions[:, 2:3], reshape = True, dims = (Nt, Nx))
     Vx_pred = tensor_to_np(predictions[:, 3:4], reshape = True, dims = (Nt, Nx))
     Vy_pred = tensor_to_np(predictions[:, 4:5], reshape = True, dims = (Nt, Nx))
     N_pred = tensor_to_np(predictions[:, 5:6], reshape = True, dims = (Nt, Nx))
-    P_x_pred = tensor_to_np(predictions[:, 6:7], reshape = True, dims = (Nt, Nx))
-    phi_pred = tensor_to_np(predictions[:, 7:8], reshape = True, dims = (Nt, Nx))
-    Bdot_pred = tensor_to_np(predictions[:, 8:9], reshape = True, dims = (Nt, Nx))  
-    
+     
     
     # Plotting the reconstructed quantities
-    fig, axes = plt.subplots(3, 3, figsize=(25, 25))
+    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
     
-    predictions = [Ex_pred, Ey_pred, Bz_pred, Vx_pred, Vy_pred, N_pred, P_x_pred, phi_pred, Bdot_pred]
-    ground_truths = [Ex_GT, Ey_GT, Bz_GT, Vx_GT, Vy_GT, N_GT, P_x_GT, phi_GT, Bdot_GT]
-    titles = [r'$\hat{E_x}$ (longitudinal)', 
-              r'$\hat{E_y}$ (transverse)', 
-              r'$\hat{B_z}$',
-              r'$\hat{v_x}$', r'$\hat{v_y}$', 
-              r'$\hat{n_e}$', 
-              r'$\hat{\partial_{x}P}$',
-              r'$\hat{\phi}$',
-              r'$\hat{\dot{B}}$']
+    predictions = [phi_pred, Bdot_pred, Ax_pred, Ay_pred,
+                   Ex_pred, Ey_pred, Bz_pred, Vx_pred, Vy_pred, N_pred]
+    ground_truths = quantities_GT
+    titles = [r'$\hat{\phi}$', 
+              r'$\hat{\dot{B}}$', 
+              r'$\hat{Ax}$',
+              r'$\hat{Ay}$',
+              r'$\hat{Ex}$',
+              r'$\hat{Ey}$',
+              r'$\hat{Bz}$',
+              r'$\hat{V_x}$', 
+              r'$\hat{V_y}$', 
+              r'$\hat{N_e}$']
     
     colors = ['PiYG', 'PRGn', 'BrBG',
               'PuOr', 'RdGy', 'RdBu',
-              'RdYlBu', 'RdYlGn', 'bwr']
+              'RdYlBu', 'RdYlGn', 'bwr',
+              'seismic', 'berlin', 'vanimo']
     
     for ax, quantity, ground_truth, title, color in zip(axes.flatten(), predictions, ground_truths, titles, colors):
         im = ax.imshow(quantity, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', vmin = -np.max(np.abs(ground_truth)), vmax = np.max(np.abs(ground_truth)), cmap=color)
@@ -968,16 +973,18 @@ def plot_reconstructed_quantities_residuals(device, model, extent, Nt, Nx, means
     residuals = pde_residuals(model, TT_tensor, XX_tensor, means, stds)
     
     gauss_res = tensor_to_np(residuals[:, 0:1], reshape=True, dims=(Nt, Nx))
-    faraday_res = tensor_to_np(residuals[:, 1:2], reshape=True, dims=(Nt, Nx))
-    ampere_res = tensor_to_np(residuals[:, 2:3], reshape=True, dims=(Nt, Nx))
-    continuity_res = tensor_to_np(residuals[:, 3:4], reshape=True, dims=(Nt, Nx))
-    momentum_x_res = tensor_to_np(residuals[:, 4:5], reshape=True, dims=(Nt, Nx))
-    momentum_y_res = tensor_to_np(residuals[:, 5:6], reshape=True, dims=(Nt, Nx))
-    adiabatic_res = tensor_to_np(residuals[:, 6:7], reshape=True, dims=(Nt, Nx))
-    electrostatic_res = tensor_to_np(residuals[:, 7:8], reshape=True, dims=(Nt, Nx))
-    induction_res = tensor_to_np(residuals[:, 8:9], reshape=True, dims=(Nt, Nx))
+    electirc_x_res = tensor_to_np(residuals[:, 1:2], reshape=True, dims=(Nt, Nx))
+    electirc_y_res = tensor_to_np(residuals[:, 2:3], reshape=True, dims=(Nt, Nx))
+    faraday_y_res = tensor_to_np(residuals[:, 3:4], reshape = True, dims = (Nt, Nx))
+    faraday_x_res = tensor_to_np(residuals[:, 4:5], reshape = True, dims = (Nt, Nx))
+    ampere_res = tensor_to_np(residuals[:, 5:6], reshape=True, dims=(Nt, Nx))
+    coul_gauge_res = tensor_to_np(residuals[:, 6:7], reshape=True, dims=(Nt, Nx))
+    wave_Ax_res = tensor_to_np(residuals[:, 7:8], reshape=True, dims=(Nt, Nx))
+    wave_Ay_res = tensor_to_np(residuals[:, 8:9], reshape=True, dims=(Nt, Nx))
+    wave_phi_res = tensor_to_np(residuals[:, 9:10], reshape=True, dims=(Nt, Nx))
+    induction_res = tensor_to_np(residuals[:, 10:11], reshape=True, dims=(Nt, Nx))
     
-    fig, axes = plt.subplots(3, 3, figsize=(25, 25))
+    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
     titles = [r'$|\partial_x E_x - n_e|$', 
               r'$|\partial_x E_y - \partial_t B_z|$', 
               r'$|-\partial_x B_z + \partial_t v_y - \partial_t E_y|$',
@@ -1031,7 +1038,7 @@ def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, s
     
     
     #Plotting th relative errors of the reconstructed quantities
-    fig, axes = plt.subplots(3, 3, figsize=(25, 25))
+    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
     
     rel_errors = []
     quantities_str = [r'$E_x$', r'$E_y$', r'$B_z$', 
