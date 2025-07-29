@@ -973,8 +973,8 @@ def plot_reconstructed_quantities_residuals(device, model, extent, Nt, Nx, means
     residuals = pde_residuals(model, TT_tensor, XX_tensor, means, stds)
     
     gauss_res = tensor_to_np(residuals[:, 0:1], reshape=True, dims=(Nt, Nx))
-    electirc_x_res = tensor_to_np(residuals[:, 1:2], reshape=True, dims=(Nt, Nx))
-    electirc_y_res = tensor_to_np(residuals[:, 2:3], reshape=True, dims=(Nt, Nx))
+    electric_x_res = tensor_to_np(residuals[:, 1:2], reshape=True, dims=(Nt, Nx))
+    electric_y_res = tensor_to_np(residuals[:, 2:3], reshape=True, dims=(Nt, Nx))
     faraday_y_res = tensor_to_np(residuals[:, 3:4], reshape = True, dims = (Nt, Nx))
     faraday_x_res = tensor_to_np(residuals[:, 4:5], reshape = True, dims = (Nt, Nx))
     ampere_res = tensor_to_np(residuals[:, 5:6], reshape=True, dims=(Nt, Nx))
@@ -986,17 +986,21 @@ def plot_reconstructed_quantities_residuals(device, model, extent, Nt, Nx, means
     
     fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
     titles = [r'$|\partial_x E_x - n_e|$', 
-              r'$|\partial_x E_y - \partial_t B_z|$', 
-              r'$|-\partial_x B_z + \partial_t v_y - \partial_t E_y|$',
-              r'$|\partial_t n_e + \partial_x v_x|$', 
-              r'$|\partial_t v_x + \partial_x E_x + \partial_x P_e|$', 
-              r'$|\partial_t v_y + \partial_x E_y|$', 
-              r'$|\partial_x P_e - 3 v_{th}^2 \partial_x n_e n_e^2|$',
-              r'$|\partial_x \phi + E_x|$', 
-              r'$|\partial_t B_z + \dot{B}|$']
-    quantities = [gauss_res, faraday_res, ampere_res, 
-                continuity_res, momentum_x_res, momentum_y_res, 
-                adiabatic_res, electrostatic_res, induction_res]
+              r'$|E_x + \partial_x \phi_x + \partial_t A_x|$', 
+              r'$|E_y + \partial_t A_y|$',
+              r'$|B_z - \partial_x A_y|$', 
+              r'$|-\partial_x B_z + V_y + \partial_t E_y|$', 
+              r'$|V_x + \partial_t E_x|$', 
+              r'$|\partial_x E_y + \dot{B}|$',
+              r'$|\partial_x A_x + \partial_t \phi|$', 
+              r'$|\partial_t^2 A_x - \partial_x^2 A_x + V_x|$',
+              r'$|\patial_t^2 A_y + V_y|$',
+              r'$|\partial_t^2 \phi - \partial_x^2 \phi + N_e|$',
+              r'$|\partial_t B - \dot{B}|$']
+    
+    quantities = [gauss_res, electric_x_res, electric_y_res, faraday_y_res, 
+                 faraday_x_res, ampere_res, coul_gauge_res, wave_Ax_res, 
+                 wave_Ay_res, wave_phi_res, induction_res]
     
     for ax, quantity, title in zip(axes.flatten(), quantities, titles):
         im = ax.imshow(quantity, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', cmap='Reds')
