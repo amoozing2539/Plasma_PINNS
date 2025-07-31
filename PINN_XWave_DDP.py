@@ -126,7 +126,7 @@ def get_lr(optimizer) -> float:
   
     
 #calculate k from dispersion relation
-def x_wave_dispersion(omega, omega_ce, omega_pe):
+def dispersion(omega, omega_ce, omega_pe):
     """
     Function to calculate the wave number k and the normalized wave number k_lambda_D.
     
@@ -151,8 +151,8 @@ def x_wave_dispersion(omega, omega_ce, omega_pe):
     
     return k, k_lambda_D
 
-k, k_lambda_D = x_wave_dispersion(omega, omega_ce, omega_pe)
-print(f"k = {k:.3f}, k*lambda_D = {k_lambda_D:.3f}")
+# k, k_lambda_D = x_wave_dispersion(omega, omega_ce, omega_pe)
+# print(f"k = {k:.3f}, k*lambda_D = {k_lambda_D:.3f}")
 
 
 def check_size_eq(lst):
@@ -183,9 +183,9 @@ def analytical_solution(x, t, omega, k, phi_amp, Ay_amp, B0, delta):
     return phi, Bdot, Ax, Ay, Ex, Vx, Vy, N
 
 
-def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_list, phi_amp_list, delta_list):
+def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_ce, omega_p, omega_list, phi_amp_list, Ay_amp_list, B0_list, delta_list):
 
-    if not check_size_eq([omega_list, phi_amp_list, delta_list]):
+    if not check_size_eq([omega_list, phi_amp_list, Ay_amp_list, delta_list]):
         raise Exception("Parameter lists are not the same size!")
 
     x = np.linspace(xmin, xmax, nx)
@@ -202,24 +202,22 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_list, phi_amp_list, delt
     N = np.zeros_like(x_arr, dtype=np.complex128)
 
     for i in range(len(omega_list)):
-        temp_phi, temp_Bdot, temp_Ax, temp_Ay, temp_Ex, temp_Ey, temp_Bz, temp_Vx, temp_Vy, temp_N = analytical_solution(x_arr, t_arr, omega_list[i], \
-                                                               x_wave_dispersion(omega_list[i], omega_ce, omega_pe)[0], \
-                                                               phi_amp_list[i], delta_list[i])
+        temp_phi, temp_Bdot, temp_Ax, temp_Ay, temp_Ex, temp_Ey, temp_Bz, temp_Vx, temp_Vy, temp_N = analytical_solution(x=x_arr, t=t_arr, omega=omega_list[i],
+                                                                                                                        k=dispersion(omega_list[i], omega_ce=omega_ce, omega_pe=omega_pe),
+                                                                                                                        phi_amp=phi_amp_list[i], Ay_amp=Ay_amp_list[i], B0=B0_list[i],
+                                                                                                                        delta=delta_list[i])
         phi += temp_phi
         Bdot += temp_Bdot
         Ax += temp_Ax
         Ay += temp_Ay
-        Ex += temp_Ex
-        Ey += temp_Ey
-        Bz += temp_Bz
         Vx += temp_Vx
         Vy += temp_Vy
         N += temp_N
         
 
-    return x_arr.flatten(), t_arr.flatten(), np.real(phi).flatten(),np.real(Bdot).flatten(), \
-            np.real(Ax).flatten(), np.real(Ay).flatten(), np.real(Ex).flatten(), \
-            np.real(Ey).flatten(), np.real(Bz).flatten(), np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten()
+    return x_arr.flatten(), t_arr.flatten(), np.real(phi).flatten(), np.real(Bdot).flatten(), \
+            np.real(Ax).flatten(), np.real(Ay).flatten(), \
+            np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten()
 
 
 def sparse_measurements(x, t, phi, Bdot, num_samples):
