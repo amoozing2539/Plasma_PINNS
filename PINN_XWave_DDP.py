@@ -31,6 +31,7 @@ omega_ce = 2.
 omega = 2.5
 omega_pe = 1.
 phi_amp = 1.
+B_0_amp = 1.
 
 
 def set_seed(seed: int = 42) -> None: #meaning of life 
@@ -164,30 +165,22 @@ def phase_factor(delta):
     return np.exp(1j*delta)
 
 
-def analytical_solution(x, t, omega, k, phi_amp, delta):
+def analytical_solution(x, t, omega, k, phi_amp, Ay_amp, B0, delta):
     
     phi_amp *= phase_factor(delta)
+    Ay_amp *= phase_factor(delta)
     
-    c=1 #just for clarity
-    factor_dielectric = omega_pe**2/ (omega**2 - omega_ce**2)
-    factor_freq = omega_ce/(omega_pe)
-    vel_factor = 1-(factor_freq**2)*(1/omega**2)
-    K = 1-factor_dielectric
-    D = (omega_ce/omega) * factor_dielectric
-    Nsq = (c**2 * k**2)/omega**2
+    vel_factor = 1/(B0**2 - omega**2)
     
-    phi = phi_amp * np.exp(1j*(k*x - omega*t))
-    Ex = (1j/k)*(omega**2 + k**2)*phi
-    Ey = 1j*(D/K-Nsq)*Ex
-    Bz = (k/omega)*Ey
-    Ax = (omega/k)*Bz
-    Ay = (-1j/omega)*Ey
-    Vx = (1/omega**2)*(-1j*omega*Ex - factor_freq*Ey)*(vel_factor**-1)
-    Vy = (1/omega**2)*(-1j*omega*Ey - factor_freq*Ex)*(vel_factor**-1)
-    N = (omega**2 + k**2)*phi
-    Bdot = -1j*k*Ey
+    phi = phi_amp * np.exp(1j(k*x - omega*t))
+    Ax = (omega/k) * phi
+    Ay = Ay_amp * np.exp(1j*(k*x - omega*t))
+    Vx = vel_factor * (omega*(omega**2/k - k)*phi + 1j*omega*B0*Ay)
+    Vy = vel_factor * (-B0*(omega**2/k - k)*phi + (omega**2)*Ay)
+    N = (k**2 - omega**2)*phi
+    Bdot = omega*k*Ay_amp*np.exp(1j(k*x - omega*t))
      
-    return phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N
+    return phi, Bdot, Ax, Ay, Ex, Vx, Vy, N
 
 
 def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_list, phi_amp_list, delta_list):
@@ -204,9 +197,6 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_list, phi_amp_list, delt
     Bdot = np.zeros_like(x_arr, dtype=np.complex128)
     Ax = np.zeros_like(x_arr, dtype=np.complex128)
     Ay = np.zeros_like(x_arr, dtype=np.complex128)
-    Ex = np.zeros_like(x_arr, dtype=np.complex128)
-    Ey = np.zeros_like(x_arr, dtype=np.complex128)
-    Bz = np.zeros_like(x_arr, dtype=np.complex128)
     Vx = np.zeros_like(x_arr, dtype=np.complex128)
     Vy = np.zeros_like(x_arr, dtype=np.complex128)
     N = np.zeros_like(x_arr, dtype=np.complex128)
@@ -1237,7 +1227,7 @@ if __name__ == '__main__':
         # Training parameters
         'num_epochs': 2000,
         'n_batches': 50, # Number of collocation batches per epoch per GPU
-        'lr': 1e-3, 
+        'lr': 1e-6, 
         'lamda': 1.0,
 
         # Data generation parameters
