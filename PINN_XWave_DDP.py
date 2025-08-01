@@ -25,15 +25,6 @@ from datetime import datetime
 plt.style.use('seaborn-v0_8-poster')
 
 
-#Global variables physics constants
-vth = .1
-omega_ce = 2.
-omega = 2.5
-omega_pe = 1.
-phi_amp = 1.
-B_0_amp = 1.
-
-
 def set_seed(seed: int = 42) -> None: #meaning of life 
 
     """
@@ -126,7 +117,7 @@ def get_lr(optimizer) -> float:
   
     
 #calculate k from dispersion relation
-def dispersion(omega, omega_ce, omega_pe):
+def dispersion(omega, omega_ce, omega_pe, vth):
     """
     Function to calculate the wave number k and the normalized wave number k_lambda_D.
     
@@ -150,9 +141,6 @@ def dispersion(omega, omega_ce, omega_pe):
     k_lambda_D = k*vth
     
     return k, k_lambda_D
-
-# k, k_lambda_D = x_wave_dispersion(omega, omega_ce, omega_pe)
-# print(f"k = {k:.3f}, k*lambda_D = {k_lambda_D:.3f}")
 
 
 def check_size_eq(lst):
@@ -240,43 +228,6 @@ def collocation_points(xmin, xmax, tmin, tmax, Nx, Nt, L, tau):
     return x_coll.flatten(), t_coll.flatten(), dx, dt
 
 
-omega_list = [omega]
-phi_amp_list = [phi_amp]  # Amplitude of the electric field
-delta_list = [0.0]  # Phase factor for the wave solution
-
-lamda = 2 * np.pi / k  # Wavelength
-T = (2 * np.pi) / omega  # Period of the wave
-xmin, xmax = 0, 3*lamda
-tmin, tmax = 0, 3*T
-
-L = xmax - xmin  # Length of the domain
-tau = tmax - tmin  # Time duration of the wave
-Nt = 2000 # Number of time points
-Nx = 2000 # Number of spatial points
-Nt_coll = 200 
-Nx_coll = 200
-dt = T/float(Nt)
-dx = L/float(Nx)
-
-t_arr = np.linspace(tmin, tmax, Nt)
-x_arr = np.linspace(xmin, xmax, Nx)
-
-print(f"k = {k:.4e}")
-print(f"k lambda_debye = {k_lambda_D:.4e}")
-print(f"L = {L:.3e} [c / omega_pe]")
-print(f"T = {T:.3e} [1 / omega_pe]")
-print(f"dx = {dx:.3e} [c / omega_pe]")
-print(f"dt = {dt:.3e} [1 / omega_pe]")
-
-
-X_arr, T_arr, phi_flat, Bdot_flat, Ax_flat, Ay_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat, = generate_data(
-xmin, xmax, tmin, tmax, Nx, Nt, omega_list, phi_amp_list, delta_list)
-
-x_sparse, t_sparse, phi_sparse, Bdot_sparse = sparse_measurements(X_arr, T_arr, phi_flat, Bdot_flat, num_samples=200)
-
-x_coll, t_coll, dx, dt = collocation_points(xmin, xmax, tmin, tmax, Nx_coll, Nt_coll, L, tau)
-
-
 def derivative_x(f, dx):
 
     f_x = np.zeros_like(f)
@@ -286,6 +237,7 @@ def derivative_x(f, dx):
     f_x[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dx   # 2nd order accurate backward difference stencil for x_f edge
 
     return f_x
+
 
 def derivative_t(f, dt):
 
@@ -297,21 +249,6 @@ def derivative_t(f, dt):
 
     return f_t
 
-
-#Ground Truth Values
-quantities_flat = [phi_flat, Bdot_flat, Ax_flat, Ay_flat, Ex_flat, Ey_flat, Bz_flat, Vx_flat, Vy_flat, N_flat]
-extent_GT = [xmin, xmax, tmin, tmax]
-quantities_GT = [x.reshape(Nt, Nx) for x in quantities_flat]
-titles_GT = [f'$\phi [\\frac{{m_{{e}}c^2}}{{e}}]$', 
-            f'$\dot{{B}} [\\frac{{e}}{{m_{{e}}c}}]$',
-            f'$A_x [\\frac{{m_{{e}}c^2}}{{e}}]$',
-            f'$A_y [\\frac{{m_{{e}}c^2}}{{e}}]$',
-            f'$E_x [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (longitudinal)', 
-            f'$E_y [\\frac{{\\omega_{{pe}}m_{{e}}c}}{{e}}]$ (transverse)', 
-            f'$B_z [\\frac{{e}}{{m_{{e}}c\\omega_{{pe}}}}]$',
-            f'$v_x [c]$', 
-            f'$v_y [c]$', 
-            f'$N_e [n_0]$']
 
 
 #Plot GTs
@@ -345,75 +282,6 @@ def plot_analytical(quantities, titles, extent):
     plt.suptitle("Ground Truth")
     plt.savefig("XWave_Ground_Truth_Plots")
 
-#Plot Ground Truth Values
-# print("-------Plotting Ground Truth Values-------------")
-# plot_analytical(quantities=quantities_GT, titles = titles_GT, extent = extent_GT)
-
-
-#Plot constraints
-phi = quantities_GT[0]
-Bdot= quantities_GT[1]
-Ax = quantities_GT[2]
-Ay = quantities_GT[3]
-Ex = quantities_GT[4]
-Ey = quantities_GT[5]
-Bz = quantities_GT[6]
-Vx = quantities_GT[7]
-Vy = quantities_GT[8]
-N = quantities_GT[9]
-
-
-phi_x = derivative_x(phi, dx)
-phi_xx = derivative_x(phi_x, dx)
-phi_t = derivative_t(phi, dt)
-phi_tt = derivative_t(phi_t, dt)
-
-Ax_x = derivative_x(Ax, dx)
-Ax_xx = derivative_x(Ax_x, dx)
-Ax_t = derivative_t(Ax, dt)
-Ax_tt = derivative_t(Ax_t, dt)
-Ay_x = derivative_x(Ay, dx)
-Ay_xx = derivative_x(Ay_x, dx)
-Ay_t = derivative_t(Ay, dt)
-Ay_tt = derivative_t(Ay_t, dt)
-
-Ex_x = derivative_x(Ex, dx)
-Ex_t = derivative_t(Ex, dt)
-Ey_x = derivative_x(Ey, dx)
-Ey_t = derivative_t(Ey, dt)
-
-Bz_x = derivative_x(Bz, dx)
-Bz_t = derivative_t(Bz, dt)
-
-gauss_x = Ey_x - N
-electric_field_x = Ex + phi_x + Ax_t
-electric_field_y = Ey + Ay_t
-Bfield_curl_A = Bz - Ay_x
-faraday_y = -Bz_x + Vy + Ey_t
-faraday_x = Vx + Ex_t
-ampere_z = Ey_x + Bdot
-coul_gauge_x = Ax_x + phi_t
-wave_A_x = Ax_tt - Ax_xx + Vx
-wave_A_y = Ay_tt + Vy
-wave_phi = phi_tt - phi_xx + N
-Bdot_def = Bz_t - Bdot
-
-constraints_ext = [x_arr[1], x_arr[-2], t_arr[1], t_arr[-2]]
-constraints = [gauss_x, electric_field_x, electric_field_y, Bfield_curl_A,
-               faraday_y, faraday_x, ampere_z, coul_gauge_x,
-               wave_A_x, wave_A_y, wave_phi, Bdot_def]
-constraint_titles = [f'$|\\partial_x E_y - N_e|$', 
-          f'$|E_x + \\phi_x + \\partial_t A_x|$',
-          f'$|E_y + \\partial_t A_y|$',
-          f'$|B_z - \\partial_x A_y|$',
-          f'$|-\\partial_x B_z + V_y + \\partial_t E_y|$',
-          f'$|V_x + \\partial_t E_x|$',
-          f"$|\\partial_x E_y + \\dot{{B}}|$",
-          f'$|\\partial_x A_x + \\partial_t \\phi|$',
-          f'$|\\partial_{{t}}^{{2}} A_x - \\partial_{{x}}^{{2}} A_x + V_x|$',
-          f'$|\\partial_{{t}}^{{2}} A_y + V_y|$',
-          f'$|\\partial_{{t}}^{{2}} \\phi - \\partial_{{x}}^{{x}} \\phi + N_e|$',
-          f'$|\\partial_t B - \\dot{{B}}|']
 
 
 def plot_constraints(constraints, titles, extent):
@@ -500,7 +368,7 @@ class Swish(nn.Module):
 #Actual construction of the MLP class
 class MLP(nn.Module):
     
-    def __init__(self, extent: np.ndarray, device: torch.device, num_hidden_layers: int = 3, hidden_size: int = 50, activation: str = 'tanh', adaptive_af: bool = False, init: Union[None, str] = None, input_encoding: bool = False, sigma: float = 1.0, single_output: bool = False) -> None:
+    def __init__(self, extent: np.ndarray, device: torch.device, num_hidden_layers: int = 3, hidden_size: int = 64, activation: str = 'tanh', adaptive_af: bool = False, init: Union[None, str] = None, input_encoding: bool = False, sigma: float = 1.0, single_output: bool = False) -> None:
         
         super(MLP, self).__init__()
         
@@ -517,7 +385,7 @@ class MLP(nn.Module):
         if single_output:
             self.output_size = 1
         else:
-            self.output_size = 10 # 9 outputs: phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N
+            self.output_size = 7 # 9 outputs: phi, Bdot, Ax, Ay, Vx, Vy, N
               
         if activation == 'tanh' or activation == 'Tanh':
             self.activation_fn = Tanh(device, adaptive=adaptive_af)
@@ -623,17 +491,14 @@ def pde_residuals(model, t, x, means, stds):
     if grad_enabled and not x.requires_grad:
         x = x.detach().requires_grad_(True)
         
-    residuals = torch.zeros(t.size(dim=0), 9).to(t.device)
+    residuals = torch.zeros(t.size(dim=0), 7).to(t.device)
     
-    phi, Bdot, Ax, Ay, Ex, Ey, Bz, Vx, Vy, N = (model(t, x)*stds + means).T
+    phi, Bdot, Ax, Ay, Vx, Vy, N = (model(t, x)*stds + means).T
     
     phi = phi.reshape(-1, 1)
     Bdot = Bdot.reshape(-1, 1)
     Ax = Ax.reshape(-1,1)
     Ay = Ay.reshape(-1,1)
-    Ex = Ex.reshape(-1, 1)
-    Ey = Ey.reshape(-1, 1)
-    Bz = Bz.reshape(-1, 1)
     Vx = Vx.reshape(-1, 1)
     Vy = Vy.reshape(-1, 1)
     N = N.reshape(-1, 1)
@@ -645,39 +510,43 @@ def pde_residuals(model, t, x, means, stds):
         phi_xx = grad(phi_x, x, grad_outputs=torch.ones_like(phi_x), create_graph=True)[0]
         phi_t = grad(phi, t, grad_outputs=torch.ones_like(phi), create_graph=True)[0]
         phi_tt = grad(phi_t, t, grad_outputs=torch.ones_like(phi_t), create_graph=True)[0]
+        phi_xt = grad(phi_x, t, grad_outputs=torch.ones_like(phi_x), create_graph=True)[0]
         
         Ax_x = grad(Ax, x, grad_outputs=torch.ones_like(Ax), create_graph=True)[0]
         Ax_xx = grad(Ax_x, x, grad_outputs=torch.ones_like(Ax_x), create_graph=True)[0]
         Ax_t = grad(Ax, t, grad_outputs=torch.ones_like(Ax), create_graph=True)[0]
         Ax_tt = grad(Ax_t, t, grad_outputs=torch.ones_like(Ax_t), create_graph=True)[0]
+        Ax_xt = grad(Ax_x, t, grad_outputs=torch.ones_like(Ax_x), create_graph=True)[0]
+
         
         Ay_x = grad(Ay, x, grad_outputs=torch.ones_like(Ay), create_graph=True)[0]
         Ay_xx = grad(Ay_x, x, grad_outputs=torch.ones_like(Ay_x), create_graph=True)[0]
         Ay_t = grad(Ay, t, grad_outputs=torch.ones_like(Ay), create_graph=True)[0]
         Ay_tt = grad(Ay_t, t, grad_outputs=torch.ones_like(Ay_t), create_graph=True)[0]
+        Ay_xt = grad(Ay_x, t, grad_outputs=torch.ones_like(Ay_x), create_graph=True)[0]
         
-        Ex_x = grad(Ex, x, grad_outputs=torch.ones_like(Ex), create_graph=True)[0]
-        Ex_t = grad(Ex, t, grad_outputs=torch.ones_like(Ex), create_graph=True)[0]
-        Ey_x = grad(Ey, x, grad_outputs=torch.ones_like(Ey), create_graph=True)[0]
-        Ey_t = grad(Ey, t, grad_outputs=torch.ones_like(Ey), create_graph=True)[0]
+        Vx_t = grad(Vx, t, grad_outputs=torch.ones_like(Vx), create_graph=True)[0]
+        Vx_x = grad(Vx, x, grad_outputs=torch.ones_like(Vx), create_graph=True)[0]
         
-        Bz_x = grad(Bz, x, grad_outputs=torch.ones_like(Bz), create_graph=True)[0]
-        Bz_t = grad(Bz, t, grad_outputs=torch.ones_like(Bz), create_graph=True)[0]
+        Vy_t = grad(Vy, t, grad_outputs=torch.ones_like(Vy), create_graph=True)[0]
+        Vy_x = grad(Vy, x, grad_outputs=torch.ones_like(Vy), create_graph=True)[0]
+        
+        N_t = grad(N, t, grad_outputs=torch.ones_like(N), create_graph=True)[0]
+        
         
         #Don't need derivatives for Vx, Vy, N, or Bdot
         
-        residuals[:, 0:1] = Ex_x - N                  #Gauss x
-        residuals[:, 1:2] = Ex + phi_x + Ax_t         #electrostatic x
-        residuals[:, 2:3] = Ey + Ay_t                 #electrostatic y
-        residuals[:, 3:4] = Bz - Ay_x                 #bfield curl A
-        residuals[:, 4:5] = -Bz_x + Vy + Ey_t         #Faraday's y
-        residuals[:, 5:6] = Vx - Ex_t                 #Faraday's x
-        residuals[:, 6:7] = Ey_x + Bdot               #Ampere's z
-        residuals[:, 7:8] = Ax_x + phi_t              #Coulomb Gauge x
-        residuals[:, 8:9] = Ax_tt - Ax_xx + Vx        #Wave Ax 
-        residuals[:, 9:10] = Ay_tt - Ay_xx + Vy       #wave Ay 
-        residuals[:, 10:11] = phi_tt - phi_xx + N     #Wave phi
-        residuals[:, 11:12] = Bz_t - Bdot             #induction
+        residuals[:, 0:1] = Ax_x + phi_x             #Gauge
+        residuals[:, 1:2] = phi_xx + Ax_xt - N       #Maxwell_1x
+        residuals[:, 2:3] = Ax_tt - phi_xt + Vx      #Maxwell_2x
+        residuals[:, 3:4] = -Ay_xx + Ay_tt + Vy      #Maxwell_2y
+        residuals[:, 4:5] = Ax_xx - Ax_tt + Vx       #Wave_Ax
+        residuals[:, 5:6] = Ay_xx - Ay_tt + Vy       #Wave_Ay  
+        residuals[:, 6:7] = phi_xx - phi_tt + N      #Wave_phi 
+        residuals[:, 7:8] = Bdot - Ay_xt             #B_curl(A)
+        residuals[:, 8:9] = Vx_t - (phi_x + Ax_t) + Vy*B_0_amp #Momentum_x        
+        residuals[:, 9:10] = Vy_t - Ay_t - Vx*B_0_amp      #Momentum_y
+        residuals[:, 10:11] = N_t + Vx_x     #continuity
         
     else:
         residuals.fill_(0.0)  # If gradients are not enabled, set residuals to zero
@@ -696,40 +565,39 @@ def get_physics_loss(model, t_coll, x_coll, means, stds, rank):
     
     residuals = pde_residuals(model, t_coll, x_coll, means, stds)
     
-    gauss_res = residuals[:, 0:1]
-    electric_x_res = residuals[:, 1:2]
-    electric_y_res = residuals[:, 2:3]
-    bfield_curl_A_res = residuals[:, 3:4]
-    faraday_y_res = residuals[:, 4:5]
-    faraday_x_res = residuals[:, 5:6]
-    ampere_z_res = residuals[:, 6:7]
-    coul_gauge_res = residuals[:, 7:8]
-    wave_Ax_res = residuals[:, 8:9]
-    wave_Ay_res = residuals[:, 9:10]
-    wave_phi_res = residuals[:, 10:11]
-    induction_res = residuals[:, 11:12]
+    gauge_res = residuals[:, 0:1]
+    maxwell_1x_res = residuals[:, 1:2]
+    maxwell_2x_res = residuals[:, 2:3]
+    maxwell_2y_res = residuals[:, 3:4]
+    wave_Ax_res = residuals[:, 4:5]
+    wave_Ay_res = residuals[:, 5:6]
+    wave_phi_res = residuals[:, 6:7]
+    bdot_curlA_res = residuals[:, 7:8]
+    momentum_x_res = residuals[:, 8:9]
+    momentum_y_res = residuals[:, 9:10]
+    continuity_res = residuals[:, 10:11]
     
-    gauss_loss = torch.mean(gauss_res**2)
-    electric_x_loss = torch.mean(electric_x_res**2)
-    electric_y_loss = torch.mean(electric_y_res**2)
-    bfield_curl_A_loss = torch.mean(bfield_curl_A_res**2)
-    faraday_y_loss = torch.mean(faraday_y_res**2)
-    faraday_x_loss = torch.mean(faraday_x_res**2)
-    ampere_z_loss = torch.mean(ampere_z_res**2)
-    coul_gauge_loss = torch.mean(coul_gauge_res**2)
+    gauge_loss = torch.mean(gauge_res**2)
+    maxwell_1x_loss = torch.mean(maxwell_1x_res**2)
+    maxwell_2x_loss = torch.mean(maxwell_2x_res**2)
+    maxwell_2y_loss = torch.mean(maxwell_2y_res**2)
     wave_Ax_loss = torch.mean(wave_Ax_res**2)
     wave_Ay_loss = torch.mean(wave_Ay_res**2)
     wave_phi_loss = torch.mean(wave_phi_res**2)
-    induction_loss = torch.mean(induction_res**2)
+    bdot_curlA_loss = torch.mean(bdot_curlA_res**2)
+    momentum_x_loss = torch.mean(momentum_x_res**2)
+    momentum_y_loss = torch.mean(momentum_y_res**2)
+    continuity_loss = torch.mean(continuity_res**2)
     
-    physics_loss =  gauss_loss + electric_x_loss + electric_y_loss + bfield_curl_A_loss + \
-                    faraday_y_loss + faraday_x_loss + ampere_z_loss + coul_gauge_loss + \
-                    wave_Ax_loss + wave_Ay_loss + wave_phi_loss + induction_loss
+    
+    physics_loss =  gauge_loss + maxwell_1x_loss + maxwell_2x_loss + maxwell_2y_loss + \
+                    wave_Ax_loss + wave_Ay_loss + wave_phi_loss + bdot_curlA_loss + \
+                    momentum_x_loss + momentum_y_loss + continuity_loss
                     
     
-    return  physics_loss, gauss_loss, electric_x_loss, electric_y_loss, bfield_curl_A_loss, \
-            faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
-            wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss
+    return  physics_loss, gauge_loss, maxwell_1x_loss, maxwell_2x_loss, maxwell_2y_loss, wave_Ax_loss, \
+            wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
+            momentum_y_loss, continuity_loss
 
 
 def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank):
@@ -753,40 +621,39 @@ def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds,
 
 def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x_coll, means, stds, rank, lamda=1.0):
     
-    physics_loss, gauss_loss, electric_x_loss, electric_y_loss, bfield_curl_A_loss, \
-    faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
-    wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss = get_physics_loss(model, t_coll, x_coll, means, stds, rank)
+    physics_loss, gauge_loss, maxwell_1x_loss, maxwell_2x_loss, maxwell_2y_loss, wave_Ax_loss, \
+    wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
+    momentum_y_loss, continuity_loss = get_physics_loss(model, t_coll, x_coll, means, stds, rank)
     
     sm_loss = get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank)
     
     loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
     
     return  loss, sm_loss, physics_loss, \
-            gauss_loss, electric_x_loss, electric_y_loss, bfield_curl_A_loss,\
-            faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
-            wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss
+            gauge_loss, maxwell_1x_loss, maxwell_2x_loss, maxwell_2y_loss, wave_Ax_loss, \
+            wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
+            momentum_y_loss, continuity_loss
 
-def write_loss(hist, loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, 
-               electric_y_loss, bfield_curl_A_loss, faraday_y_loss, faraday_x_loss, ampere_z_loss,
-               coul_gauge_loss, wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss):
+def write_loss(hist, loss, sm_loss, physics_loss, gauge_loss, maxwell_1x_loss, 
+               maxwell_2x_loss, maxwell_2y_loss, wave_Ax_loss, wave_Ay_loss, wave_phi_loss,
+               bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss):
     
     """Writes the loss history to a dictionary"""
     
     hist['loss'].append(loss.item())
     hist['sm_loss'].append(sm_loss.item())
     hist['physics_loss'].append(physics_loss.item())
-    hist['gauss_loss'].append(gauss_loss.item())
-    hist['electric_x_loss'].append(electric_x_loss.item())
-    hist['electric_y_loss'].append(electric_y_loss.item())
-    hist['bfield_cul_A_loss'].append(bfield_curl_A_loss.item())
-    hist['faraday_y_loss'].append(faraday_y_loss.item())
-    hist['faraday_x_loss'].append(faraday_x_loss.item())
-    hist['ampere_z_loss'].append(ampere_z_loss.item())
-    hist['coul_gauge_loss'].append(coul_gauge_loss.item())
+    hist['gauge_loss'].append(gauge_loss.item())
+    hist['maxwell_1x_loss'].append(maxwell_1x_loss.item())
+    hist['maxwell_2x_loss'].append(maxwell_2x_loss.item())
+    hist['maxwell_2y_loss'].append(maxwell_2y_loss.item())
     hist['wave_Ax_loss'].append(wave_Ax_loss.item())
     hist['wave_Ay_loss'].append(wave_Ay_loss.item())
     hist['wave_phi_loss'].append(wave_phi_loss.item())
-    hist['induction_loss'].append(induction_loss.item())
+    hist['bdot_curlA_loss'].append(bdot_curlA_loss.item())
+    hist['momentum_x_loss'].append(momentum_x_loss.item())
+    hist['momentum_y_loss'].append(momentum_y_loss.item())
+    hist['continuity_loss'].append(continuity_loss.item())
     
     return hist
 
@@ -817,10 +684,10 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             
             optimizer.zero_grad() #clear the gradients of our optimizer 
             
-            loss, sm_loss, physics_loss, gauss_loss, electric_x_loss, electric_y_loss, bfield_curl_A_loss, \
-            faraday_y_loss, faraday_x_loss, ampere_z_loss, coul_gauge_loss, \
-            wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss = get_total_loss(model, 
-                                                                        t_sparse, x_sparse, phi_sparse, 
+            loss, sm_loss, physics_loss, \
+            gauge_loss, maxwell_1x_loss, maxwell_2x_loss, maxwell_2y_loss, wave_Ax_loss, \
+            wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
+            momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
                                                                         Bdot_sparse, t_coll, x_coll, means, stds, 
                                                                         rank, lamda)
             
@@ -829,10 +696,10 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             
             #update our loss history only for rank 0 
             if rank == 0:
-                hist = write_loss(
-                    hist, loss, sm_loss, physics_loss, gauss_loss, electric_x_loss,
-                    electric_y_loss, bfield_curl_A_loss, faraday_y_loss, faraday_x_loss, ampere_z_loss,
-                    coul_gauge_loss, wave_Ax_loss, wave_Ay_loss, wave_phi_loss, induction_loss)
+                hist = write_loss(hist, loss, sm_loss, physics_loss, \
+                                 gauge_loss, maxwell_1x_loss, maxwell_2x_loss, maxwell_2y_loss, wave_Ax_loss, \
+                                 wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
+                                 momentum_y_loss, continuity_loss)
             
             old_lr = get_lr(optimizer) #get the current learning rate
             scheduler.step(loss) #update the learning rate using the scheduler based on the loss
@@ -911,35 +778,27 @@ def plot_reconstructed_quantities(device, model, extent, Nt, Nx, means, stds):
     Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape = True, dims = (Nt, Nx))
     Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
     Ay_pred = tensor_to_np(predictions[:,3:4], reshape = True, dims = (Nt, Nx))
-    Ex_pred = tensor_to_np(predictions[:, 4:5], reshape = True, dims = (Nt, Nx))
-    Ey_pred = tensor_to_np(predictions[:, 5:6], reshape = True, dims = (Nt, Nx))
-    Bz_pred = tensor_to_np(predictions[:, 6:7], reshape = True, dims = (Nt, Nx))
-    Vx_pred = tensor_to_np(predictions[:, 7:8], reshape = True, dims = (Nt, Nx))
-    Vy_pred = tensor_to_np(predictions[:, 8:9], reshape = True, dims = (Nt, Nx))
-    N_pred = tensor_to_np(predictions[:, 9:10], reshape = True, dims = (Nt, Nx))
+    Vx_pred = tensor_to_np(predictions[:, 5:6], reshape = True, dims = (Nt, Nx))
+    Vy_pred = tensor_to_np(predictions[:, 6:7], reshape = True, dims = (Nt, Nx))
+    N_pred = tensor_to_np(predictions[:, 7:8], reshape = True, dims = (Nt, Nx))
      
     
     # Plotting the reconstructed quantities
-    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
+    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(25, 25))
     
-    predictions = [phi_pred, Bdot_pred, Ax_pred, Ay_pred,
-                   Ex_pred, Ey_pred, Bz_pred, Vx_pred, Vy_pred, N_pred]
+    predictions = [phi_pred, Bdot_pred, Ax_pred, Ay_pred, Vx_pred, Vy_pred, N_pred]
     ground_truths = quantities_GT
     titles = [r'$\hat{\phi}$', 
               r'$\hat{\dot{B}}$', 
               r'$\hat{Ax}$',
               r'$\hat{Ay}$',
-              r'$\hat{Ex}$',
-              r'$\hat{Ey}$',
-              r'$\hat{Bz}$',
               r'$\hat{V_x}$', 
               r'$\hat{V_y}$', 
               r'$\hat{N_e}$']
     
     colors = ['PiYG', 'PRGn', 'BrBG',
               'PuOr', 'RdGy', 'RdBu',
-              'RdYlBu', 'RdYlGn', 'bwr',
-              'seismic', 'berlin', 'vanimo']
+              'RdYlBu', 'RdYlGn', 'bwr']
     
     for ax, quantity, ground_truth, title, color in zip(axes.flatten(), predictions, ground_truths, titles, colors):
         im = ax.imshow(quantity, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', vmin = -np.max(np.abs(ground_truth)), vmax = np.max(np.abs(ground_truth)), cmap=color)
@@ -971,36 +830,34 @@ def plot_reconstructed_quantities_residuals(device, model, extent, Nt, Nx, means
     
     residuals = pde_residuals(model, TT_tensor, XX_tensor, means, stds)
     
-    gauss_res = tensor_to_np(residuals[:, 0:1], reshape=True, dims=(Nt, Nx))
-    electric_x_res = tensor_to_np(residuals[:, 1:2], reshape=True, dims=(Nt, Nx))
-    electric_y_res = tensor_to_np(residuals[:, 2:3], reshape=True, dims=(Nt, Nx))
-    bfield_curl_A_res = tensor_to_np(residuals[:, 3:4], reshape = True, dims = (Nt, Nx))
-    faraday_y_res = tensor_to_np(residuals[:, 4:5], reshape = True, dims = (Nt, Nx))
-    faraday_x_res = tensor_to_np(residuals[:, 5:6], reshape = True, dims = (Nt, Nx))
-    ampere_res = tensor_to_np(residuals[:, 6:7], reshape=True, dims=(Nt, Nx))
-    coul_gauge_res = tensor_to_np(residuals[:, 7:8], reshape=True, dims=(Nt, Nx))
-    wave_Ax_res = tensor_to_np(residuals[:, 8:9], reshape=True, dims=(Nt, Nx))
-    wave_Ay_res = tensor_to_np(residuals[:, 9:10], reshape=True, dims=(Nt, Nx))
-    wave_phi_res = tensor_to_np(residuals[:, 10:11], reshape=True, dims=(Nt, Nx))
-    induction_res = tensor_to_np(residuals[:, 11:12], reshape=True, dims=(Nt, Nx))
-    
+    gauge_res = tensor_to_np(residuals[:, 0:1], reshape=True, dims=(Nt, Nx))
+    maxwell_1x_res = tensor_to_np(residuals[:, 1:2], reshape=True, dims=(Nt, Nx))
+    maxwell_2x_res = tensor_to_np(residuals[:, 2:3], reshape=True, dims=(Nt, Nx))
+    maxwell_2y_res = tensor_to_np(residuals[:, 3:4], reshape = True, dims = (Nt, Nx))
+    wave_Ax_res = tensor_to_np(residuals[:, 4:5], reshape = True, dims = (Nt, Nx))
+    wave_Ay_res = tensor_to_np(residuals[:, 5:6], reshape = True, dims = (Nt, Nx))
+    wave_phi_res = tensor_to_np(residuals[:, 6:7], reshape=True, dims=(Nt, Nx))
+    bdot_curlA_res = tensor_to_np(residuals[:, 7:8], reshape=True, dims=(Nt, Nx))
+    momentum_x_res = tensor_to_np(residuals[:, 8:9], reshape=True, dims=(Nt, Nx))
+    momentum_y_res = tensor_to_np(residuals[:, 9:10], reshape=True, dims=(Nt, Nx))
+    continuity_res = tensor_to_np(residuals[:, 10:11], reshape=True, dims=(Nt, Nx))
+
     fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
-    titles = [r'$|\partial_x E_x - n_e|$', 
-              r'$|E_x + \partial_x \phi_x + \partial_t A_x|$', 
-              r'$|E_y + \partial_t A_y|$',
-              r'$|B_z - \partial_x A_y|$', 
-              r'$|-\partial_x B_z + V_y + \partial_t E_y|$', 
-              r'$|V_x + \partial_t E_x|$', 
-              r'$|\partial_x E_y + \dot{B}|$',
-              r'$|\partial_x A_x + \partial_t \phi|$', 
-              r'$|\partial_t^2 A_x - \partial_x^2 A_x + V_x|$',
-              r'$|\patial_t^2 A_y + V_y|$',
-              r'$|\partial_t^2 \phi - \partial_x^2 \phi + N_e|$',
-              r'$|\partial_t B - \dot{B}|$']
+    titles = [r'$|\partial_x A_x + \partial_t \phi|$', 
+              r'$|\partial_x^2 \phi + \partial_{xt}^2 A_x - n_e|$', 
+              r'$|\partial_t^2 A_x - \partial_{xt}^2 \phi + v_x|$',
+              r'$|-\partial_x^2 A_y - \partial_{tt}^2 A_y + v_y|$', 
+              r'$|\partial_x^2 A_x - \partial_t^2 A_x + v_x|$', 
+              r'$|\partial_x^2 A_y - \partial_t^2 A_y + v_y|$', 
+              r'$|\partial_x^2 \phi - \partial_t^2 \phi + n_e|$',
+              r'$|\dot{B} - \partial^2_{xt} A_y|$', 
+              r'$|\partial_t v_x - (\partial_x \phi + \partial_t A_x) + v_y B_0|$',
+              r'$|\partial_t v_y - \partial_t A_y - v_x B_0|$',
+              r'$|\partial_t n_e + \partial_x v_x|$']
     
-    quantities = [gauss_res, electric_x_res, electric_y_res, bfield_curl_A_res, faraday_y_res, 
-                 faraday_x_res, ampere_res, coul_gauge_res, wave_Ax_res, 
-                 wave_Ay_res, wave_phi_res, induction_res]
+    quantities = [gauge_res, maxwell_1x_res, maxwell_2x_res, maxwell_2y_res, wave_Ax_res, 
+                 wave_Ay_res, wave_phi_res, bdot_curlA_res, momentum_x_res, 
+                 momentum_y_res, continuity_res]
     
     for ax, quantity, title in zip(axes.flatten(), quantities, titles):
         im = ax.imshow(quantity, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', cmap='Reds')
@@ -1034,9 +891,6 @@ def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, s
     Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape=True, dims=(Nt, Nx))
     Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
     Ay_pred = tensor_to_np(predictions[:,3:4], reshape = True, dims = (Nt, Nx))
-    Ex_pred = tensor_to_np(predictions[:, 4:5], reshape=True, dims=(Nt, Nx))
-    Ey_pred = tensor_to_np(predictions[:, 5:6], reshape=True, dims=(Nt, Nx))
-    Bz_pred = tensor_to_np(predictions[:, 6:7], reshape=True, dims=(Nt, Nx))
     Vx_pred = tensor_to_np(predictions[:, 7:8], reshape=True, dims=(Nt, Nx))
     Vy_pred = tensor_to_np(predictions[:, 8:9], reshape=True, dims=(Nt, Nx))
     N_pred = tensor_to_np(predictions[:, 9:10], reshape=True, dims=(Nt, Nx))
@@ -1049,12 +903,11 @@ def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, s
     rel_errors = []
     quantities_str = [r'$\phi$', 
                      r'$\dot{B}$',
-                     r'$A_x', r'$A_y$',
-                     r'$E_x$', r'$E_y$', r'$B_z$', 
+                     r'$A_x', r'$A_y$', 
                      r'$v_x$', r'$v_y$', 
                      r'$n_e$']
     
-    for pred, gt, quant_str in zip([phi_pred, Bdot_pred, Ax_pred, Ay_pred, Ex_pred, Ey_pred, Bz_pred, Vx_pred, Vy_pred, N_pred], ground_truths, quantities_str):
+    for pred, gt, quant_str in zip([phi_pred, Bdot_pred, Ax_pred, Ay_pred, Vx_pred, Vy_pred, N_pred], ground_truths, quantities_str):
         rel_error = np.sqrt(np.mean((pred - gt)**2)) / np.var(gt)
         print(f"Relative error {quant_str}: ", rel_error)
         rel_errors.append(rel_error)
@@ -1062,10 +915,7 @@ def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, s
     error_titles = [r'$|\phi - \hat{\phi}|$',
                     r'$|\dot{B} - \hat{\dot{B}}|$'
                     r'$|A_x - \hat{A_x}|$', 
-                    r'$|A_y - \hat{A_y}|$'
-                    r'$|E_x - \hat{E_x}|$', 
-                    r'$|E_y - \hat{E_y}|$',
-                    r'$|B_z - \hat{B_z}|$',
+                    r'$|A_y - \hat{A_y}|$',
                     r'$|v_x - \hat{v_x}|$',
                     r'$|v_y - \hat{v_y}|$',
                     r'$|n_e - \hat{n_e}|$']
@@ -1095,7 +945,8 @@ def run_ddp_training(rank, world_size, params):
     
     #Define physical parameters 
     phi_amp = 1.
-    k, k_lambda_D = x_wave_dispersion(omega, omega_ce, omega_pe)
+    Ay_amp = 1.
+    k, k_lambda_D = dispersion(omega, omega_ce, omega_pe)
     lamda_wave = 2*np.pi/k
     T_wave = (2*np.pi)/omega
     xmin, xmax = 0, 3*lamda_wave
@@ -1110,7 +961,7 @@ def run_ddp_training(rank, world_size, params):
     # dt_val = T_wave/float(Nt) 
     # dx_val = L/float(Nx) 
     
-    X_flat_np, T_flat_np, phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Ex_flat_np, Ey_flat_np, Bz_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np  = generate_data(
+    X_flat_np, T_flat_np, phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np  = generate_data(
         xmin, xmax, tmin, tmax, Nx, Nt, params['omega_list'], params['E_amp_list'], params['delta_list']
     )
     
@@ -1129,7 +980,7 @@ def run_ddp_training(rank, world_size, params):
     x_coll_tensor = np_to_tensor(x_coll_np, reshape =True, device=rank, requires_grad=True)
     
     # Means and Stds for normalization (ensure these are on the correct device)
-    data_flat_GT = np.array([phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Ex_flat_np, Ey_flat_np, Bz_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np])
+    data_flat_GT = np.array([phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np])
     means = np_to_tensor(np.mean(data_flat_GT, axis=1), reshape=True, dims=(1,10), device=rank)
     stds = np_to_tensor(np.std(data_flat_GT, axis=1) + 1e-8, reshape=True, dims=(1,10), device=rank) #epsilon to prevent division by zero. 
     
@@ -1155,11 +1006,10 @@ def run_ddp_training(rank, world_size, params):
     
     hist = {
         'loss': [], 'sm_loss': [], 'physics_loss': [],
-        'gauss_loss': [], 'electric_x_loss': [], 'electric_y_loss': [],
-        'bfield_cul_A_loss': [], 'faraday_y_loss': [], 'faraday_x_loss': [],
-        'ampere_z_loss': [], 'coul_gauge_loss':[], 'wave_Ax_loss': [], 'wave_Ay_loss': [],
-        'wave_phi_loss':[], 'induction_loss':[]
-    }
+        'gauge_loss': [], 'maxwell_1x_loss': [], 'maxwell_2x_loss': [],
+        'maxwell_2y_loss': [], 'wave_Ax_loss': [], 'wave_Ay_loss': [],
+        'wave_phi_loss': [], 'bdot_curlA_loss':[], 'momentum_x_loss': [], 'momentum_y_loss': [],
+        'continuity':[]}
     
     # Optimize the model
     model, optimizer, hist = optimize(
@@ -1185,66 +1035,66 @@ def run_ddp_training(rank, world_size, params):
     pass
 
 
-if __name__ == '__main__':
-    # Set up environment variables for torch.distributed.launch
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'     
+# if __name__ == '__main__':
+#     # Set up environment variables for torch.distributed.launch
+#     os.environ['MASTER_ADDR'] = 'localhost'
+#     os.environ['MASTER_PORT'] = '12355'     
 
-    world_size = 2 # Number of GPUs to use (your 2 RTX 4070s)
+#     world_size = 2 # Number of GPUs to use (your 2 RTX 4070s)
 
-    # Define common parameters for all processes
-    omega_list = [2.5] # Example values based on your notebook
-    E_amp_list = [1.0]
-    delta_list = [0.0]
+#     # Define common parameters for all processes
+#     omega_list = [2.5] # Example values based on your notebook
+#     E_amp_list = [1.0]
+#     delta_list = [0.0]
 
-    # Temporarily calculate k for lamda_wave and T_wave calculation
-    # These global vars need to be set or params passed
-    # It's better to pass them via `params` dict.
-    vth = 0.1 # This is used by x_wave_dispersion
-    omega_ce = 2.0 # This is used by x_wave_dispersion
-    omega_pe = 1.0 # This is used by x_wave_dispersion
+#     # Temporarily calculate k for lamda_wave and T_wave calculation
+#     # These global vars need to be set or params passed
+#     # It's better to pass them via `params` dict.
+#     vth = 0.1 # This is used by x_wave_dispersion
+#     omega_ce = 2.0 # This is used by x_wave_dispersion
+#     omega_pe = 1.0 # This is used by x_wave_dispersion
     
-    # Calculate initial physical constants to define extent
-    k_init, _ = x_wave_dispersion(omega_list[0], omega_ce, omega_pe)
-    lamda_wave_init = 2 * np.pi / k_init
-    T_wave_init = (2 * np.pi) / omega_list[0]
+#     # Calculate initial physical constants to define extent
+#     k_init, _ = dispersion(omega_list[0], omega_ce, omega_pe)
+#     lamda_wave_init = 2 * np.pi / k_init
+#     T_wave_init = (2 * np.pi) / omega_list[0]
     
-    xmin_init, xmax_init = 0, 3 * lamda_wave_init
-    tmin_init, tmax_init = 0, 3 * T_wave_init   
+#     xmin_init, xmax_init = 0, 3 * lamda_wave_init
+#     tmin_init, tmax_init = 0, 3 * T_wave_init   
 
-    params = {
-        'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
-        'num_hidden_layers': 5,
-        'hidden_size': 50,
-        'activation': 'tanh',
-        'init': 'xavier',
-        'input_encoding': True,
-        'sigma': 1.0,
-        'output_size': 10, 
+#     params = {
+#         'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
+#         'num_hidden_layers': 5,
+#         'hidden_size': 50,
+#         'activation': 'tanh',
+#         'init': 'xavier',
+#         'input_encoding': True,
+#         'sigma': 1.0,
+#         'output_size': 10, 
 
-        # Training parameters
-        'num_epochs': 2000,
-        'n_batches': 50, # Number of collocation batches per epoch per GPU
-        'lr': 1e-6, 
-        'lamda': 1.0,
+#         # Training parameters
+#         'num_epochs': 2000,
+#         'n_batches': 50, # Number of collocation batches per epoch per GPU
+#         'lr': 1e-6, 
+#         'lamda': 1.0,
 
-        # Data generation parameters
-        'Nt': 2000,
-        'Nx': 2000,
-        'Nt_coll': 200, # Number of collocation points for meshes
-        'Nx_coll': 200, # Number of collocation points for meshes
-        'num_sparse_samples': 200,
-        'omega_list': omega_list,
-        'E_amp_list': E_amp_list,
-        'delta_list': delta_list,
-    }
+#         # Data generation parameters
+#         'Nt': 2000,
+#         'Nx': 2000,
+#         'Nt_coll': 200, # Number of collocation points for meshes
+#         'Nx_coll': 200, # Number of collocation points for meshes
+#         'num_sparse_samples': 200,
+#         'omega_list': omega_list,
+#         'E_amp_list': E_amp_list,
+#         'delta_list': delta_list,
+#     }
 
-    # Use torch.multiprocessing.spawn to launch DDP processes
-    torch.multiprocessing.spawn(
-        run_ddp_training,
-        args=(world_size, params),
-        nprocs=world_size,
-        join=True
-    )
+#     # Use torch.multiprocessing.spawn to launch DDP processes
+#     torch.multiprocessing.spawn(
+#         run_ddp_training,
+#         args=(world_size, params),
+#         nprocs=world_size,
+#         join=True
+#     )
 
  
