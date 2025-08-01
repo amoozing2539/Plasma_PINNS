@@ -171,7 +171,7 @@ def analytical_solution(x, t, omega, k, phi_amp, Ay_amp, B0, delta):
     return phi, Bdot, Ax, Ay, Ex, Vx, Vy, N
 
 
-def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_ce, omega_p, omega_list, phi_amp_list, Ay_amp_list, B0_list, delta_list):
+def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_ce, omega_pe, omega_list, phi_amp_list, Ay_amp_list, B0_list, delta_list):
 
     if not check_size_eq([omega_list, phi_amp_list, Ay_amp_list, delta_list]):
         raise Exception("Parameter lists are not the same size!")
