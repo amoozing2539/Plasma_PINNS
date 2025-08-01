@@ -131,13 +131,13 @@ def dispersion(omega, omega_ce, omega_pe, vth):
     -k_lambda_D(float): Unitless product k*lambda_D, where lambda_D is the Debye length.
     """
     
-    c=1 #just for clarity
-    factor = omega_pe**2/ (omega**2 - omega_ce**2)
-    K = 1-factor
-    D = (omega_ce/omega) * factor
-    csq_ksq = omega**2 * (K**2 - D**2)/K
-    
-    k = np.sqrt(csq_ksq/c)
+    c = 1  # normalized units
+    factor = omega_pe**2 / (omega**2 - omega_ce**2)  # this is equivalent to omega_pe^2 / (omega^2 - omega_ce^2)
+    K = 1 - factor  # this is equivalent to S
+    D = (omega_ce / omega) * factor  # matches D = (omega_ce / omega) * (omega_pe^2 / (omega^2 - omega_ce^2))
+    csq_ksq = omega**2 * (K**2 - D**2) / K  # same as: omega^2 (S - D^2/S)
+    k = np.sqrt(csq_ksq / c)  # computes k
+
     k_lambda_D = k*vth
     
     return k, k_lambda_D
@@ -158,26 +158,36 @@ def analytical_solution(x, t, omega, k, phi_amp, Ay_amp, B0, delta):
     phi_amp *= phase_factor(delta)
     Ay_amp *= phase_factor(delta)
     
-    vel_factor = 1/(B0**2 - omega**2)
+    phase = np.exp(1j*(k*x - omega*t))
     
-    phi = phi_amp * np.exp(1j(k*x - omega*t))
-    Ax = (omega/k) * phi
-    Ay = Ay_amp * np.exp(1j*(k*x - omega*t))
-    Vx = vel_factor * (omega*(omega**2/k - k)*phi + 1j*omega*B0*Ay)
-    Vy = vel_factor * (-B0*(omega**2/k - k)*phi + (omega**2)*Ay)
-    N = (k**2 - omega**2)*phi
-    Bdot = omega*k*Ay_amp*np.exp(1j(k*x - omega*t))
+    phi = phi_amp * phase
+    
+    Ax =  -phi
+    Ay = Ay_amp * phase
+    
+    denom = B0**2 - omega**2
+    
+    # Electron density perturbation N = n_e - n_0
+    N = (k * (1j * B0 * Ay_amp - k * phi_amp + omega * phi_amp) / denom) * phase
+    
+    # Electron velocities
+    vx = (omega * (1j * B0 * Ay_amp - k * phi_amp + omega * phi_amp) / denom) * phase
+    vy = ((- omega**2 * Ay_amp - 1j * B0 * k * phi_amp + 1j * B0 * omega * phi_amp) / denom) * phase
+    
+    # Time derivative of B field (from curl of A)
+    Bdot = -1j * omega * Ay_amp * phase
      
-    return phi, Bdot, Ax, Ay, Ex, Vx, Vy, N
+    return phi, Bdot, Ax, Ay, vx, vy, N
 
 
-def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_ce, omega_pe, omega_list, phi_amp_list, Ay_amp_list, B0_list, delta_list):
+def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, Ay_amp_list, B0_list, delta_list):
 
     if not check_size_eq([omega_list, phi_amp_list, Ay_amp_list, delta_list]):
         raise Exception("Parameter lists are not the same size!")
 
     x = np.linspace(xmin, xmax, nx)
     t = np.linspace(tmin, tmax, nt)
+    
 
     x_arr, t_arr = np.meshgrid(x,t)
     
@@ -190,10 +200,10 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_ce, omega_pe, omega_list
     N = np.zeros_like(x_arr, dtype=np.complex128)
 
     for i in range(len(omega_list)):
-        temp_phi, temp_Bdot, temp_Ax, temp_Ay, temp_Ex, temp_Ey, temp_Bz, temp_Vx, temp_Vy, temp_N = analytical_solution(x=x_arr, t=t_arr, omega=omega_list[i],
-                                                                                                                        k=dispersion(omega_list[i], omega_ce=omega_ce, omega_pe=omega_pe),
-                                                                                                                        phi_amp=phi_amp_list[i], Ay_amp=Ay_amp_list[i], B0=B0_list[i],
-                                                                                                                        delta=delta_list[i])
+        k, _ = dispersion(omega=omega_list[i], omega_ce=omega_ce, omega_pe=omega_pe, vth=vth)
+        temp_phi, temp_Bdot, temp_Ax, temp_Ay, temp_Vx, temp_Vy, temp_N = analytical_solution(x=x_arr, t=t_arr, omega=omega_list[i],
+                                                                                                k=k, phi_amp=phi_amp_list[i], Ay_amp=Ay_amp_list[i], B0=B0_list[i],
+                                                                                                delta=delta_list[i])
         phi += temp_phi
         Bdot += temp_Bdot
         Ax += temp_Ax
@@ -252,15 +262,20 @@ def derivative_t(f, dt):
 
 
 #Plot GTs
-def plot_analytical(quantities, titles, extent):
+def plot_analytical(quantities, sparse, titles, extent):
     """Plot the analytical solution."""
     
     
-    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
+    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(20, 20))
     colors = ['PiYG', 'PRGn', 'BrBG',
               'PuOr', 'RdGy', 'RdBu',
               'RdYlBu', 'RdYlGn', 'bwr',
               'seismic', 'berlin', 'vanimo']
+    x_sparse = sparse[0]
+    t_sparse = sparse[1]
+    phi_sparse = sparse[2]
+    bdot_sparse = sparse[3]
+    
                       
     for ax, quantity, title, color in zip(axes.flatten(), quantities, titles, colors):
         im = ax.imshow(quantity, aspect='auto', extent=extent, origin='lower', cmap=color)
@@ -480,7 +495,7 @@ class MLP(nn.Module):
         return ''
 
 
-def pde_residuals(model, t, x, means, stds):
+def pde_residuals(model, t, x, B0_amp, means, stds):
     
     #Check tracking gradients
     grad_enabled = torch.is_grad_enabled()
@@ -544,8 +559,8 @@ def pde_residuals(model, t, x, means, stds):
         residuals[:, 5:6] = Ay_xx - Ay_tt + Vy       #Wave_Ay  
         residuals[:, 6:7] = phi_xx - phi_tt + N      #Wave_phi 
         residuals[:, 7:8] = Bdot - Ay_xt             #B_curl(A)
-        residuals[:, 8:9] = Vx_t - (phi_x + Ax_t) + Vy*B_0_amp #Momentum_x        
-        residuals[:, 9:10] = Vy_t - Ay_t - Vx*B_0_amp      #Momentum_y
+        residuals[:, 8:9] = Vx_t - (phi_x + Ax_t) + Vy*B0_amp #Momentum_x        
+        residuals[:, 9:10] = Vy_t - Ay_t - Vx*B0_amp      #Momentum_y
         residuals[:, 10:11] = N_t + Vx_x     #continuity
         
     else:
