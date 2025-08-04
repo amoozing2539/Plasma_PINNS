@@ -153,29 +153,27 @@ def phase_factor(delta):
     return np.exp(1j*delta)
 
 
-def analytical_solution(x, t, omega, k, phi_amp, Ay_amp, B0, delta):
+def analytical_solution(x, t, omega, k, phi_amp, delta):
     
     phi_amp *= phase_factor(delta)
-    Ay_amp *= phase_factor(delta)
+    Ay_amp  = (1/(omega**2 - k**2))*phi_amp
     
     phase = np.exp(1j*(k*x - omega*t))
     
     phi = phi_amp * phase
     
-    Ax =  -phi
+    Ax = (omega/k)*phi
     Ay = Ay_amp * phase
     
-    denom = B0**2 - omega**2
-    
     # Electron density perturbation N = n_e - n_0
-    N = (k * (1j * B0 * Ay_amp - k * phi_amp + omega * phi_amp) / denom) * phase
+    N = (k**2 - omega**2)*phi
     
     # Electron velocities
-    vx = (omega * (1j * B0 * Ay_amp - k * phi_amp + omega * phi_amp) / denom) * phase
-    vy = ((- omega**2 * Ay_amp - 1j * B0 * k * phi_amp + 1j * B0 * omega * phi_amp) / denom) * phase
+    vx = (omega/k)*(omega**2-k**2)*phi
+    vy = (omega/k)*(omega**2-k**2)*Ay
     
     # Time derivative of B field (from curl of A)
-    Bdot = -1j * omega * Ay_amp * phase
+    Bdot = omega*k*Ay
      
     return phi, Bdot, Ax, Ay, vx, vy, N
 
