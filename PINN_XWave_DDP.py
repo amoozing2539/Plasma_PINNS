@@ -179,6 +179,7 @@ def analytical_solution(x, t, omega, k, phi_amp, delta):
     return phi, Bdot, Ax, Ay, vx, vy, N
 
 
+
 def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, delta_list):
 
     if not check_size_eq([omega_list, phi_amp_list, delta_list]):
@@ -260,26 +261,46 @@ def derivative_xx(f, dx):
     return f_xx
 
 
+# def derivative_t(f, dt):
+
+#     f_t = np.zeros_like(f)
+
+#     f_t[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dt             # 2nd order accurate central difference stencil for interior points
+#     f_t[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dt      # 2nd order accurate forward difference stencil for t_0 edge
+#     f_t[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dt   # 2nd order accurate backward difference stencil for t_f edge
+
+#     return f_t
+
 def derivative_t(f, dt):
-
     f_t = np.zeros_like(f)
-
-    f_t[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dt             # 2nd order accurate central difference stencil for interior points
-    f_t[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dt      # 2nd order accurate forward difference stencil for t_0 edge
-    f_t[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dt   # 2nd order accurate backward difference stencil for t_f edge
-
+    # 2nd order accurate central difference stencil for interior points
+    f_t[1:-1, :] = (0.5 * f[2:, :] - 0.5 * f[0:-2, :]) / dt
+    # 2nd order accurate forward difference stencil for t_0 edge
+    f_t[0, :] = (-1.5 * f[0, :] + 2.0 * f[1, :] - 0.5 * f[2, :]) / dt
+    # 2nd order accurate backward difference stencil for t_f edge
+    f_t[-1, :] = (0.5 * f[-3, :] - 2.0 * f[-2, :] + 1.5 * f[-1, :]) / dt
     return f_t
 
 
+# def derivative_tt(f, dt):
+
+#     f_tt = np.zeros_like(f)
+
+#     f_tt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dt**2                  # 2nd order accurate central difference stencil (interior)
+#     f_tt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dt**2       # 2nd order accurate forward difference stencil (x_0 edge)
+#     f_tt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dt**2  # 2nd order accurate backward difference stencil (x_f edge)
+
+#     return f_tt
 def derivative_tt(f, dt):
-
     f_tt = np.zeros_like(f)
-
-    f_tt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dt**2                  # 2nd order accurate central difference stencil (interior)
-    f_tt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dt**2       # 2nd order accurate forward difference stencil (x_0 edge)
-    f_tt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dt**2  # 2nd order accurate backward difference stencil (x_f edge)
-
+    # 2nd order accurate central difference stencil for interior points
+    f_tt[1:-1, :] = (f[2:, :] - 2.0 * f[1:-1, :] + f[0:-2, :]) / dt**2
+    # 2nd order accurate forward difference stencil for t_0 edge
+    f_tt[0, :] = (2.0 * f[0, :] - 5.0 * f[1, :] + 4.0 * f[2, :] - 1.0 * f[3, :]) / dt**2
+    # 2nd order accurate backward difference stencil for t_f edge
+    f_tt[-1, :] = (2.0 * f[-1, :] - 5.0 * f[-2, :] + 4.0 * f[-3, :] - 1.0 * f[-4, :]) / dt**2
     return f_tt
+
 
 
 def derivative_xt(f,dx,dt):
@@ -288,6 +309,27 @@ def derivative_xt(f,dx,dt):
     f_xt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx*dt                  # 2nd order accurate central difference stencil (interior)
     f_xt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx*dt       # 2nd order accurate forward difference stencil (x_0 edge)
     f_xt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx*dt 
+    
+    return f_xt
+
+
+def spectral_derivative_x(f, L):
+    # L is the length of the domain (e.g., L = x_max - x_min)
+    N = f.shape[1] # Number of points in x
+    
+    # Create the wavenumber array
+    k_x = 2 * np.pi * np.fft.fftfreq(N, d=L/N)
+    
+    # Take the FFT along the x-axis
+    f_hat = np.fft.fft(f, axis=1)
+    
+    # Multiply by ik
+    dfdx_hat = 1j * k_x * f_hat
+    
+    # Inverse FFT to get the derivative
+    dfdx = np.fft.ifft(dfdx_hat, axis=1)
+    
+    return np.real(dfdx)
 
 
 #Plot GTs
