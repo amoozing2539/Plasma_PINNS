@@ -249,6 +249,17 @@ def derivative_x(f, dx):
     return f_x
 
 
+def derivative_xx(f, dx):
+
+    f_xx = np.zeros_like(f)
+
+    f_xx[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx**2                  # 2nd order accurate central difference stencil (interior)
+    f_xx[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx**2       # 2nd order accurate forward difference stencil (x_0 edge)
+    f_xx[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx**2  # 2nd order accurate backward difference stencil (x_f edge)
+
+    return f_xx
+
+
 def derivative_t(f, dt):
 
     f_t = np.zeros_like(f)
@@ -259,6 +270,24 @@ def derivative_t(f, dt):
 
     return f_t
 
+
+def derivative_tt(f, dt):
+
+    f_tt = np.zeros_like(f)
+
+    f_tt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dt**2                  # 2nd order accurate central difference stencil (interior)
+    f_tt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dt**2       # 2nd order accurate forward difference stencil (x_0 edge)
+    f_tt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dt**2  # 2nd order accurate backward difference stencil (x_f edge)
+
+    return f_tt
+
+
+def derivative_xt(f,dx,dt):
+    f_xt = np.zeros_like(f)
+    
+    f_xt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx*dt                  # 2nd order accurate central difference stencil (interior)
+    f_xt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx*dt       # 2nd order accurate forward difference stencil (x_0 edge)
+    f_xt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx*dt 
 
 
 #Plot GTs
