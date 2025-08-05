@@ -131,12 +131,13 @@ def dispersion(omega, omega_ce, omega_pe, vth):
     -k_lambda_D(float): Unitless product k*lambda_D, where lambda_D is the Debye length.
     """
     
-    c = 1  # normalized units
-    factor = omega_pe**2 / (omega**2 - omega_ce**2)  # this is equivalent to omega_pe^2 / (omega^2 - omega_ce^2)
-    K = 1 - factor  # this is equivalent to S
-    D = (omega_ce / omega) * factor  # matches D = (omega_ce / omega) * (omega_pe^2 / (omega^2 - omega_ce^2))
-    csq_ksq = omega**2 * (K**2 - D**2) / K  # same as: omega^2 (S - D^2/S)
-    k = np.sqrt(csq_ksq / c)  # computes k
+    omega_h_sq = omega_pe**2 + omega_ce**2
+    omega_h_factor = omega_h_sq/(omega_pe**2)
+    denom = omega**2 - omega_h_factor
+    
+    k_sq_over_omega_sq = 1 - (1/omega**2)*((omega**2-1)/denom)
+    
+    k = np.sqrt(omega**2 * k_sq_over_omega_sq)
 
     k_lambda_D = k*vth
     
@@ -178,9 +179,9 @@ def analytical_solution(x, t, omega, k, phi_amp, delta):
     return phi, Bdot, Ax, Ay, vx, vy, N
 
 
-def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, Ay_amp_list, B0_list, delta_list):
+def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, delta_list):
 
-    if not check_size_eq([omega_list, phi_amp_list, Ay_amp_list, delta_list]):
+    if not check_size_eq([omega_list, phi_amp_list, delta_list]):
         raise Exception("Parameter lists are not the same size!")
 
     x = np.linspace(xmin, xmax, nx)
@@ -200,7 +201,7 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega
     for i in range(len(omega_list)):
         k, _ = dispersion(omega=omega_list[i], omega_ce=omega_ce, omega_pe=omega_pe, vth=vth)
         temp_phi, temp_Bdot, temp_Ax, temp_Ay, temp_Vx, temp_Vy, temp_N = analytical_solution(x=x_arr, t=t_arr, omega=omega_list[i],
-                                                                                                k=k, phi_amp=phi_amp_list[i], Ay_amp=Ay_amp_list[i], B0=B0_list[i],
+                                                                                                k=k, phi_amp=phi_amp_list[i],
                                                                                                 delta=delta_list[i])
         phi += temp_phi
         Bdot += temp_Bdot
@@ -243,6 +244,7 @@ def derivative_x(f, dx):
     f_x[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dx             # 2nd order accurate central difference stencil for interior points
     f_x[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dx      # 2nd order accurate forward difference stencil for x_0 edge
     f_x[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dx   # 2nd order accurate backward difference stencil for x_f edge
+    
 
     return f_x
 
@@ -299,7 +301,7 @@ def plot_analytical(quantities, sparse, titles, extent):
 
 def plot_constraints(constraints, titles, extent):
     "Plots the constraints in their current form."
-    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(20, 20))
+    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(20, 20))
     
     for ax, constraint, title in zip(axes.flatten(), constraints, titles):
         im = ax.imshow(constraint, aspect='auto', extent=extent, origin='lower', cmap='Reds')
