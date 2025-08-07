@@ -249,82 +249,16 @@ def collocation_points(xmin, xmax, tmin, tmax, Nx, Nt, L, tau):
     return x_coll.flatten(), t_coll.flatten(), dx, dt
 
 
-# def derivative_x(f, dx):
-
-#     f_x = np.zeros_like(f)
-
-#     f_x[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dx             # 2nd order accurate central difference stencil for interior points
-#     f_x[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dx      # 2nd order accurate forward difference stencil for x_0 edge
-#     f_x[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dx   # 2nd order accurate backward difference stencil for x_f edge
+# def spectral_derivative(f,x):
+#     N = len(x)
+#     dx = x[1] - x[0]
     
-
-#     return f_x
-
-
-# def derivative_xx(f, dx):
-
-#     f_xx = np.zeros_like(f)
-
-#     f_xx[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx**2                  # 2nd order accurate central difference stencil (interior)
-#     f_xx[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx**2       # 2nd order accurate forward difference stencil (x_0 edge)
-#     f_xx[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx**2  # 2nd order accurate backward difference stencil (x_f edge)
-
-#     return f_xx
-
-
-# # def derivative_t(f, dt):
-
-# #     f_t = np.zeros_like(f)
-
-# #     f_t[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dt             # 2nd order accurate central difference stencil for interior points
-# #     f_t[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dt      # 2nd order accurate forward difference stencil for t_0 edge
-# #     f_t[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dt   # 2nd order accurate backward difference stencil for t_f edge
-
-# #     return f_t
-
-# def derivative_t(f, dt):
-#     f_t = np.zeros_like(f)
-#     # 2nd order accurate central difference stencil for interior points
-#     f_t[1:-1, :] = (0.5 * f[2:, :] - 0.5 * f[0:-2, :]) / dt
-#     # 2nd order accurate forward difference stencil for t_0 edge
-#     f_t[0, :] = (-1.5 * f[0, :] + 2.0 * f[1, :] - 0.5 * f[2, :]) / dt
-#     # 2nd order accurate backward difference stencil for t_f edge
-#     f_t[-1, :] = (0.5 * f[-3, :] - 2.0 * f[-2, :] + 1.5 * f[-1, :]) / dt
-#     return f_t
-
-
-# # def derivative_tt(f, dt):
-
-# #     f_tt = np.zeros_like(f)
-
-# #     f_tt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dt**2                  # 2nd order accurate central difference stencil (interior)
-# #     f_tt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dt**2       # 2nd order accurate forward difference stencil (x_0 edge)
-# #     f_tt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dt**2  # 2nd order accurate backward difference stencil (x_f edge)
-
-# #     return f_tt
-# def derivative_tt(f, dt):
-#     f_tt = np.zeros_like(f)
-#     # 2nd order accurate central difference stencil for interior points
-#     f_tt[1:-1, :] = (f[2:, :] - 2.0 * f[1:-1, :] + f[0:-2, :]) / dt**2
-#     # 2nd order accurate forward difference stencil for t_0 edge
-#     f_tt[0, :] = (2.0 * f[0, :] - 5.0 * f[1, :] + 4.0 * f[2, :] - 1.0 * f[3, :]) / dt**2
-#     # 2nd order accurate backward difference stencil for t_f edge
-#     f_tt[-1, :] = (2.0 * f[-1, :] - 5.0 * f[-2, :] + 4.0 * f[-3, :] - 1.0 * f[-4, :]) / dt**2
-#     return f_tt
-
-
-
-# def derivative_xt(f,dx,dt):
-#     f_xt = np.zeros_like(f)
+#     f_hat = np.fft.fft(f)
+#     k = 2*np.pi*np.fft.fftfreq(N, d=dx)
+#     df_hat = 1j * k * f_hat
+#     df = np.fft.ifft(df_hat)
     
-#     f_xt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx*dt                  # 2nd order accurate central difference stencil (interior)
-#     f_xt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx*dt       # 2nd order accurate forward difference stencil (x_0 edge)
-#     f_xt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx*dt 
-    
-#     return f_xt
-
-
-# def spectral_derivative_x(f, L):
+#     return df.real
 #     # L is the length of the domain (e.g., L = x_max - x_min)
 #     N = f.shape[1] # Number of points in x
     
@@ -386,7 +320,7 @@ def plot_constraints(constraints, titles, extent):
     fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(20, 20))
     
     for ax, constraint, title in zip(axes.flatten(), constraints, titles):
-        im = ax.imshow(constraint, aspect='auto', extent=extent, origin='lower', cmap='Reds')
+        im = ax.imshow(np.abs(constraint), aspect='auto', extent=extent, origin='lower', cmap='Reds')
         ax.set_title(title, fontsize = 15)
         ax.set_xlabel(f'$x [\\frac{{c}}{{\omega_{{pe}}}}]$')
         ax.set_ylabel('$t [\\omega_{{pe}}^{{-1}}]$')
