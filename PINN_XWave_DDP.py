@@ -154,33 +154,43 @@ def phase_factor(delta):
     return np.exp(1j*delta)
 
 
-def analytical_solution(x, t, omega, k, phi_amp, delta):
+def analytical_solution(x, t, omega, k, phi_amp, B0, delta):
     
     phi_amp *= phase_factor(delta)
-    Ay_amp  = (1/(omega**2 - k**2))*phi_amp
+    Ay_amp  = 1j*((omega**2/k)-1/k)*phi_amp
     
     phase = np.exp(1j*(k*x - omega*t))
     
     phi = phi_amp * phase
     
-    Ax = (omega/k)*phi
-    Ay = Ay_amp * phase
+    #Unperturbed vector potential from CONSTANT background magnetic field B0 in the z direction
+    #Taking the curl of these values recovers B0 = B0 * z_hat
+    A0x_times_y = -.5*B0
+    A0y_times_x = .5*B0*x
+    
+    
+    #Perturbed Vector Potential A1
+    A1x = (omega/k)*phi
+    A1y = Ay_amp * phase
     
     # Electron density perturbation N = n_e - n_0
-    N = (k**2 - omega**2)*phi
+    N = ((omega**2) - (k**2))*phi
     
     # Electron velocities
-    vx = (omega/k)*(omega**2-k**2)*phi
-    vy = (omega/k)*(omega**2-k**2)*Ay
+    vx = (omega/k)*((omega**2) - (k**2))*phi
+    vy = ((omega**2) - (k**2))*A1y
     
-    # Time derivative of B field (from curl of A)
-    Bdot = omega*k*Ay
+    # Time derivative of perturbed B field (from curl of A1)
+    Bdot = omega*k*A1y
+    
+    #Background field B0 is constant.
+    B0_value = np.full_like(Bdot, B0, dtype=np.complex128)
      
-    return phi, Bdot, Ax, Ay, vx, vy, N
+    return phi, Bdot, A1x, A1y, vx, vy, N, B0_value
 
 
 
-def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, delta_list):
+def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, delta_list, B0_list):
 
     if not check_size_eq([omega_list, phi_amp_list, delta_list]):
         raise Exception("Parameter lists are not the same size!")
@@ -188,34 +198,35 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega
     x = np.linspace(xmin, xmax, nx)
     t = np.linspace(tmin, tmax, nt)
     
-
     x_arr, t_arr = np.meshgrid(x,t)
     
     phi = np.zeros_like(x_arr, dtype=np.complex128)
     Bdot = np.zeros_like(x_arr, dtype=np.complex128)
-    Ax = np.zeros_like(x_arr, dtype=np.complex128)
-    Ay = np.zeros_like(x_arr, dtype=np.complex128)
+    A1x = np.zeros_like(x_arr, dtype=np.complex128)
+    A1y = np.zeros_like(x_arr, dtype=np.complex128)
     Vx = np.zeros_like(x_arr, dtype=np.complex128)
     Vy = np.zeros_like(x_arr, dtype=np.complex128)
     N = np.zeros_like(x_arr, dtype=np.complex128)
+    B0 = np.zeros_like(x_arr, dtype=np.complex128)
 
     for i in range(len(omega_list)):
         k, _ = dispersion(omega=omega_list[i], omega_ce=omega_ce, omega_pe=omega_pe, vth=vth)
-        temp_phi, temp_Bdot, temp_Ax, temp_Ay, temp_Vx, temp_Vy, temp_N = analytical_solution(x=x_arr, t=t_arr, omega=omega_list[i],
+        temp_phi, temp_Bdot, temp_A1x, temp_A1y, temp_Vx, temp_Vy, temp_N, temp_B0 = analytical_solution(x=x_arr, t=t_arr, omega=omega_list[i],
                                                                                                 k=k, phi_amp=phi_amp_list[i],
-                                                                                                delta=delta_list[i])
+                                                                                                delta=delta_list[i], B0=B0_list[i])
         phi += temp_phi
         Bdot += temp_Bdot
-        Ax += temp_Ax
-        Ay += temp_Ay
+        A1x += temp_A1x
+        A1y += temp_A1y
         Vx += temp_Vx
         Vy += temp_Vy
         N += temp_N
+        B0 += temp_B0
         
 
     return x_arr.flatten(), t_arr.flatten(), np.real(phi).flatten(), np.real(Bdot).flatten(), \
-            np.real(Ax).flatten(), np.real(Ay).flatten(), \
-            np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten()
+            np.real(A1x).flatten(), np.real(A1y).flatten(), \
+            np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten(), np.real(B0).flatten()
 
 
 def sparse_measurements(x, t, phi, Bdot, num_samples):
@@ -238,98 +249,98 @@ def collocation_points(xmin, xmax, tmin, tmax, Nx, Nt, L, tau):
     return x_coll.flatten(), t_coll.flatten(), dx, dt
 
 
-def derivative_x(f, dx):
+# def derivative_x(f, dx):
 
-    f_x = np.zeros_like(f)
+#     f_x = np.zeros_like(f)
 
-    f_x[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dx             # 2nd order accurate central difference stencil for interior points
-    f_x[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dx      # 2nd order accurate forward difference stencil for x_0 edge
-    f_x[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dx   # 2nd order accurate backward difference stencil for x_f edge
+#     f_x[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dx             # 2nd order accurate central difference stencil for interior points
+#     f_x[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dx      # 2nd order accurate forward difference stencil for x_0 edge
+#     f_x[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dx   # 2nd order accurate backward difference stencil for x_f edge
     
 
-    return f_x
+#     return f_x
 
 
-def derivative_xx(f, dx):
+# def derivative_xx(f, dx):
 
-    f_xx = np.zeros_like(f)
+#     f_xx = np.zeros_like(f)
 
-    f_xx[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx**2                  # 2nd order accurate central difference stencil (interior)
-    f_xx[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx**2       # 2nd order accurate forward difference stencil (x_0 edge)
-    f_xx[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx**2  # 2nd order accurate backward difference stencil (x_f edge)
+#     f_xx[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx**2                  # 2nd order accurate central difference stencil (interior)
+#     f_xx[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx**2       # 2nd order accurate forward difference stencil (x_0 edge)
+#     f_xx[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx**2  # 2nd order accurate backward difference stencil (x_f edge)
 
-    return f_xx
+#     return f_xx
 
+
+# # def derivative_t(f, dt):
+
+# #     f_t = np.zeros_like(f)
+
+# #     f_t[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dt             # 2nd order accurate central difference stencil for interior points
+# #     f_t[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dt      # 2nd order accurate forward difference stencil for t_0 edge
+# #     f_t[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dt   # 2nd order accurate backward difference stencil for t_f edge
+
+# #     return f_t
 
 # def derivative_t(f, dt):
-
 #     f_t = np.zeros_like(f)
-
-#     f_t[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dt             # 2nd order accurate central difference stencil for interior points
-#     f_t[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dt      # 2nd order accurate forward difference stencil for t_0 edge
-#     f_t[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dt   # 2nd order accurate backward difference stencil for t_f edge
-
+#     # 2nd order accurate central difference stencil for interior points
+#     f_t[1:-1, :] = (0.5 * f[2:, :] - 0.5 * f[0:-2, :]) / dt
+#     # 2nd order accurate forward difference stencil for t_0 edge
+#     f_t[0, :] = (-1.5 * f[0, :] + 2.0 * f[1, :] - 0.5 * f[2, :]) / dt
+#     # 2nd order accurate backward difference stencil for t_f edge
+#     f_t[-1, :] = (0.5 * f[-3, :] - 2.0 * f[-2, :] + 1.5 * f[-1, :]) / dt
 #     return f_t
 
-def derivative_t(f, dt):
-    f_t = np.zeros_like(f)
-    # 2nd order accurate central difference stencil for interior points
-    f_t[1:-1, :] = (0.5 * f[2:, :] - 0.5 * f[0:-2, :]) / dt
-    # 2nd order accurate forward difference stencil for t_0 edge
-    f_t[0, :] = (-1.5 * f[0, :] + 2.0 * f[1, :] - 0.5 * f[2, :]) / dt
-    # 2nd order accurate backward difference stencil for t_f edge
-    f_t[-1, :] = (0.5 * f[-3, :] - 2.0 * f[-2, :] + 1.5 * f[-1, :]) / dt
-    return f_t
 
+# # def derivative_tt(f, dt):
 
+# #     f_tt = np.zeros_like(f)
+
+# #     f_tt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dt**2                  # 2nd order accurate central difference stencil (interior)
+# #     f_tt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dt**2       # 2nd order accurate forward difference stencil (x_0 edge)
+# #     f_tt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dt**2  # 2nd order accurate backward difference stencil (x_f edge)
+
+# #     return f_tt
 # def derivative_tt(f, dt):
-
 #     f_tt = np.zeros_like(f)
-
-#     f_tt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dt**2                  # 2nd order accurate central difference stencil (interior)
-#     f_tt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dt**2       # 2nd order accurate forward difference stencil (x_0 edge)
-#     f_tt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dt**2  # 2nd order accurate backward difference stencil (x_f edge)
-
+#     # 2nd order accurate central difference stencil for interior points
+#     f_tt[1:-1, :] = (f[2:, :] - 2.0 * f[1:-1, :] + f[0:-2, :]) / dt**2
+#     # 2nd order accurate forward difference stencil for t_0 edge
+#     f_tt[0, :] = (2.0 * f[0, :] - 5.0 * f[1, :] + 4.0 * f[2, :] - 1.0 * f[3, :]) / dt**2
+#     # 2nd order accurate backward difference stencil for t_f edge
+#     f_tt[-1, :] = (2.0 * f[-1, :] - 5.0 * f[-2, :] + 4.0 * f[-3, :] - 1.0 * f[-4, :]) / dt**2
 #     return f_tt
-def derivative_tt(f, dt):
-    f_tt = np.zeros_like(f)
-    # 2nd order accurate central difference stencil for interior points
-    f_tt[1:-1, :] = (f[2:, :] - 2.0 * f[1:-1, :] + f[0:-2, :]) / dt**2
-    # 2nd order accurate forward difference stencil for t_0 edge
-    f_tt[0, :] = (2.0 * f[0, :] - 5.0 * f[1, :] + 4.0 * f[2, :] - 1.0 * f[3, :]) / dt**2
-    # 2nd order accurate backward difference stencil for t_f edge
-    f_tt[-1, :] = (2.0 * f[-1, :] - 5.0 * f[-2, :] + 4.0 * f[-3, :] - 1.0 * f[-4, :]) / dt**2
-    return f_tt
 
 
 
-def derivative_xt(f,dx,dt):
-    f_xt = np.zeros_like(f)
+# def derivative_xt(f,dx,dt):
+#     f_xt = np.zeros_like(f)
     
-    f_xt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx*dt                  # 2nd order accurate central difference stencil (interior)
-    f_xt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx*dt       # 2nd order accurate forward difference stencil (x_0 edge)
-    f_xt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx*dt 
+#     f_xt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx*dt                  # 2nd order accurate central difference stencil (interior)
+#     f_xt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx*dt       # 2nd order accurate forward difference stencil (x_0 edge)
+#     f_xt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx*dt 
     
-    return f_xt
+#     return f_xt
 
 
-def spectral_derivative_x(f, L):
-    # L is the length of the domain (e.g., L = x_max - x_min)
-    N = f.shape[1] # Number of points in x
+# def spectral_derivative_x(f, L):
+#     # L is the length of the domain (e.g., L = x_max - x_min)
+#     N = f.shape[1] # Number of points in x
     
-    # Create the wavenumber array
-    k_x = 2 * np.pi * np.fft.fftfreq(N, d=L/N)
+#     # Create the wavenumber array
+#     k_x = 2 * np.pi * np.fft.fftfreq(N, d=L/N)
     
-    # Take the FFT along the x-axis
-    f_hat = np.fft.fft(f, axis=1)
+#     # Take the FFT along the x-axis
+#     f_hat = np.fft.fft(f, axis=1)
     
-    # Multiply by ik
-    dfdx_hat = 1j * k_x * f_hat
+#     # Multiply by ik
+#     dfdx_hat = 1j * k_x * f_hat
     
-    # Inverse FFT to get the derivative
-    dfdx = np.fft.ifft(dfdx_hat, axis=1)
+#     # Inverse FFT to get the derivative
+#     dfdx = np.fft.ifft(dfdx_hat, axis=1)
     
-    return np.real(dfdx)
+#     return np.real(dfdx)
 
 
 #Plot GTs
@@ -372,7 +383,7 @@ def plot_analytical(quantities, sparse, titles, extent):
 
 def plot_constraints(constraints, titles, extent):
     "Plots the constraints in their current form."
-    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(20, 20))
+    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(20, 20))
     
     for ax, constraint, title in zip(axes.flatten(), constraints, titles):
         im = ax.imshow(constraint, aspect='auto', extent=extent, origin='lower', cmap='Reds')
