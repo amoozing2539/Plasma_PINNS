@@ -154,29 +154,24 @@ def phase_factor(delta):
     return np.exp(1j*delta)
 
 
-def analytical_solution(x, t, omega, k, phi_amp, B0, delta):
+def analytical_solution(x, t, omega, k, phi_amp, delta):
     
     phi_amp *= phase_factor(delta)
-    Ay_amp  = 1j*((omega**2/k)-1/k)*phi_amp
+    Ay_amp  = 1j*((omega**2/k)-1/k)*phi_amp                              #Required A1y amp to ensure momentum constraints satisfied
+    B0 = np.sqrt((omega**2 - k**2 - 1)*(omega**2 - 1)/(omega**2 - k**2)) #Required B0 to ensure momentum constraints satisfied
     
     phase = np.exp(1j*(k*x - omega*t))
     
     phi = phi_amp * phase
     
-    #Unperturbed vector potential from CONSTANT background magnetic field B0 in the z direction
-    #Taking the curl of these values recovers B0 = B0 * z_hat
-    A0x_times_y = -.5*B0
-    A0y_times_x = .5*B0*x
-    
-    
-    #Perturbed Vector Potential A1
+    # Perturbed Vector Potential A1
     A1x = (omega/k)*phi
     A1y = Ay_amp * phase
     
     # Electron density perturbation N = n_e - n_0
     N = ((omega**2) - (k**2))*phi
     
-    # Electron velocities
+    # Perturbed electron velocities v1
     vx = (omega/k)*((omega**2) - (k**2))*phi
     vy = ((omega**2) - (k**2))*A1y
     
@@ -188,7 +183,61 @@ def analytical_solution(x, t, omega, k, phi_amp, B0, delta):
      
     return phi, Bdot, A1x, A1y, vx, vy, N, B0_value
 
+def derivative_t(f, dt):
 
+    f_t = np.zeros_like(f)
+
+    f_t[1:-1,:] = (0.5*f[2:,:] - 0.5*f[0:-2,:]) / dt             # 2nd order accurate central difference stencil for interior points
+    f_t[0,:] = (-1.5*f[0,:] + 2.0*f[1,:] - 0.5*f[2,:]) / dt      # 2nd order accurate forward difference stencil for t_0 edge
+    f_t[-1,:] = (0.5*f[-3,:] - 2.0*f[-2,:] + 1.5*f[-1,:]) / dt   # 2nd order accurate backward difference stencil for t_f edge
+
+    return f_t
+
+def derivative_tt(f, dt):
+    f_tt = np.zeros_like(f)
+    
+    f_tt = np.zeros_like(f)
+
+    # 2nd order accurate central difference stencil for interior points
+    f_tt[1:-1, :] = (f[2:, :] - 2.0 * f[1:-1, :] + f[0:-2, :]) / (dt**2)
+
+    # 2nd order accurate forward difference stencil for the t_0 edge
+    f_tt[0, :] = (2.0 * f[0, :] - 5.0 * f[1, :] + 4.0 * f[2, :] - f[3, :]) / (dt**2)
+
+    # 2nd order accurate backward difference stencil for the t_f edge
+    f_tt[-1, :] = (-f[-4, :] + 4.0 * f[-3, :] - 5.0 * f[-2, :] + 2.0 * f[-1, :]) / (dt**2)
+
+    return f_tt
+
+def derivative_x(f, dx):
+
+    f_x = np.zeros_like(f)
+
+    f_x[:,1:-1] = (0.5*f[:,2:] - 0.5*f[:,0:-2]) / dx             # 2nd order accurate central difference stencil for interior points
+    f_x[:,0] = (-1.5*f[:,0] + 2.0*f[:,1] - 0.5*f[:,2]) / dx      # 2nd order accurate forward difference stencil for x_0 edge
+    f_x[:,-1] = (0.5*f[:,-3] - 2.0*f[:,-2] + 1.5*f[:,-1]) / dx   # 2nd order accurate backward difference stencil for x_f edge
+
+    return f_x
+
+def derivative_xx(f, dx):
+
+    f_xx = np.zeros_like(f)
+
+    f_xx[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx**2                  # 2nd order accurate central difference stencil (interior)
+    f_xx[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx**2       # 2nd order accurate forward difference stencil (x_0 edge)
+    f_xx[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx**2  # 2nd order accurate backward difference stencil (x_f edge)
+
+    return f_xx
+
+
+def derivative_xt(f,dx,dt):
+    f_xt = np.zeros_like(f)
+    
+    f_xt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx*dt                  # 2nd order accurate central difference stencil (interior)
+    f_xt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx*dt       # 2nd order accurate forward difference stencil (x_0 edge)
+    f_xt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx*dt  # 2nd order accurate backward difference stencil (x_f edge)
+ 
+    return f_xt
 
 def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, delta_list, B0_list):
 
@@ -301,10 +350,10 @@ def plot_analytical(quantities, sparse, titles, extent):
         fig.colorbar(im, ax=ax)
         
         if f'$\phi [\\frac{{m_{{e}}c^2}}{{e}}]$' in title:
-            ax.scatter(x_sparse, t_sparse, c='black', s=20, label=f'200 φ Measurements', alpha=1.)
+            ax.scatter(x_sparse, t_sparse, c='black', s=20, label=f'500 φ Measurements', alpha=1.)
             ax.legend()
         if f'$\dot{{B}} [\\frac{{e}}{{m_{{e}}c}}]$' in title:
-            ax.scatter(x_sparse, t_sparse, c='black', s=20, label=f'200 Bdot Measurements', alpha=1.)
+            ax.scatter(x_sparse, t_sparse, c='black', s=20, label=f'500 Bdot Measurements', alpha=1.)
             ax.legend()
             
     
