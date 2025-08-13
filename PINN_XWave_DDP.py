@@ -795,7 +795,7 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
         if rank == 0 and epoch % 50 == 0:
             print(f"Epoch {epoch}/{num_epochs}, Total Loss: {loss.item():.4e}, SM Loss: {sm_loss.item():.4e}, Physics Loss: {physics_loss.item():.4e}")
         
-    returoptimizer, hist
+    return model, optimizer, hist
 
 
 def plot_loss_histories(hist):
@@ -807,7 +807,7 @@ def plot_loss_histories(hist):
     plt.xlabel("Epochs")
     plt.ylabel("Loss (arbitrary units)")
     
-    plt.semilogy(hist['sm_loss'], label=r'$\mathcal{L}_{Data}', color='blue')
+    plt.semilogy(hist['sm_loss'], label=r'$\mathcal{L}_{Data}$', color='blue')
     plt.semilogy(hist['physics_loss'], label=r'$\mathcal{L}_{Physics}$', color='green')
     plt.semilogy(hist['loss'], label=r'$\mathcal{L}_{Total}$', color='orange')
     
@@ -822,18 +822,17 @@ def plot_loss_histories(hist):
     plt.xlabel("Epochs")
     plt.ylabel("Loss (arbitrary units)")
     
-    plt.semilogy(hist['gauss_loss'], label=r'$\mathcal{L}_{Gauss}$')
-    plt.semilogy(hist['electric_x_loss'], label=r'$\mathcal{L}_{Electric_x}$')
-    plt.semilogy(hist['electric_y_loss'], label=r'$\mathcal{L}_{Electric_y}$')
-    plt.semilogy(hist['bfield_curl_A_loss'], label = r'mathcal{L}_{bfield_curl_A}')
-    plt.semilogy(hist['faraday_y_loss'], label=r'$\mathcal{L}_{Faraday_y}$')
-    plt.semilogy(hist['faraday_x_loss'], label=r'$\mathcal{L}_{Faraday_x}$')
-    plt.semilogy(hist['ampere_z_loss'], label=r'$\mathcal{L}_{Ampere}$')
-    plt.semilogy(hist['coul_gauge_loss'], label=r'$\mathcal{L}_{Coulomb Gauge}$')
+    plt.semilogy(hist['gauge_loss'], label=r'$\mathcal{L}_{Gauge}$')
+    plt.semilogy(hist['maxwell_den_loss'], label=r'$\mathcal{L}_{maxwell_den}$')
+    plt.semilogy(hist['maxwell_curx_loss'], label=r'$\mathcal{L}_{maxwell_curx}$')
+    plt.semilogy(hist['maxwell_cury_loss'], label = r'mathcal{L}_{maxwell_cury}')
     plt.semilogy(hist['wave_Ax_loss'], label=r'$\mathcal{L}_{Ax Wave}$')
     plt.semilogy(hist['wave_Ay_loss'], label=r'$\mathcal{L}_{Ay Wave}$')
     plt.semilogy(hist['wave_phi_loss'], label=r'$\mathcal{L}_{\phi Wave}$')
-    plt.semilogy(hist['induction_loss'], label=r'$\mathcal{L}_{Induction}$')    
+    plt.semilogy(hist['bdot_curlA_loss'], label=r'$\mathcal{L}_{bdot_curl(A)}$')
+    plt.semilogy(hist['momentum_x_loss'], label=r'$\mathcal{L}_{Momentum_x}$')
+    plt.semilogy(hist['momentum_y_loss'], label=r'$\mathcal{L}_{Momentum_y}$')
+    plt.semilogy(hist['continuity_loss'], label=r'$\mathcal{L}_{continuity}$')    
     
     plt.legend()
     plt.tight_layout()
@@ -1155,17 +1154,17 @@ def main():
 
     params = {
         'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
-        'num_hidden_layers': 3,
-        'hidden_size': 20,
-        'activation': 'tanh',
+        'num_hidden_layers': 4,
+        'hidden_size': 50,
+        'activation': 'sin',
         'init': 'xavier',
         'input_encoding': True,
         'sigma': 1.0,
-        'output_size': 10, 
+        'output_size': 7, # Number of outputs: phi, Bdot, Ax, Ay, Vx, Vy, N_e
 
         # Training parameters
-        'num_epochs': 1000,
-        'n_batches': 8, # Number of collocation batches per epoch per GPU
+        'num_epochs': 2000,
+        'n_batches': 32, # Number of collocation batches per epoch per GPU
         'lr': 1e-4, 
         'lamda': 1.0,
 
