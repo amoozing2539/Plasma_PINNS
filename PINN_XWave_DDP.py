@@ -368,12 +368,26 @@ def plot_constraints(constraints, titles, extent):
     "Plots the constraints in their current form."
     fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(20, 20))
     
+    #adjusted titles to remove the average
+    adjusted_titles = [r'$|\partial_t V_x - \partial_t A_{1x} - \partial_x \phi + V_y B_0|$',
+                       r'$|\partial_t V_y - \partial_t A_{1y} - V_x B_0|$']
+    
     for ax, constraint, title in zip(axes.flatten(), constraints, titles):
-        im = ax.imshow(np.abs(constraint), aspect='auto', extent=extent, origin='lower', cmap='Reds')
+        
+        #make a copy to avoid modifying the original constraint
+        plot_data = np.abs(constraint.copy())
+        
+        if title in adjusted_titles:
+            mean_value = np.mean(plot_data)
+            plot_data -= mean_value  # Remove the mean value from the constraint
+            print(f"Adjusting title: {title} by subtracting mean value: {mean_value:.4f}")
+            
+        im = ax.imshow(plot_data, aspect='auto', extent=extent, origin='lower', cmap='Reds')
         ax.set_title(title, fontsize = 15)
         ax.set_xlabel(f'$x [\\frac{{c}}{{\omega_{{pe}}}}]$')
         ax.set_ylabel('$t [\\omega_{{pe}}^{{-1}}]$')
         fig.colorbar(im, ax=ax)
+        
     
     plt.tight_layout()
     plt.show()
@@ -1127,6 +1141,10 @@ def run_ddp_training(rank, world_size, params):
 
 
 def main():
+    
+    #Set a random seed for reproducibility
+    set_seed(42) #meaning of life 
+    
     # Set up environment variables for torch.distributed.launch
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'     
@@ -1170,8 +1188,8 @@ def main():
         'lamda': 1.0,
 
         # Data generation parameters
-        'Nt': 2000,
-        'Nx': 2000,
+        'Nt': 200,
+        'Nx': 200,
         'Nt_coll': 100, # Number of collocation points for meshes
         'Nx_coll': 100, # Number of collocation points for meshes
         'num_sparse_samples': 500,
@@ -1190,3 +1208,6 @@ def main():
         nprocs=world_size,
         join=True
     )
+    
+if __name__ == "__main__":
+    main()
