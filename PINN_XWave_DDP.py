@@ -360,7 +360,7 @@ def plot_analytical(quantities, sparse, titles, extent):
     plt.tight_layout()
     plt.show()
     plt.suptitle("Ground Truth")
-    plt.savefig("XWave_Ground_Truth_Plots")
+    # plt.savefig("XWave_Ground_Truth_Plots")
 
 
 
@@ -377,7 +377,7 @@ def plot_constraints(constraints, titles, extent):
     
     plt.tight_layout()
     plt.show()
-    plt.savefig("XWave_Constraints.png")
+    # plt.savefig("XWave_Constraints.png")
     
 # print("------Plotting Constraints as is--------------")
 # plot_constraints(constraints = constraints, titles = constraint_titles, extent=constraints_ext)
@@ -825,7 +825,7 @@ def plot_loss_histories(hist):
     plt.semilogy(hist['gauge_loss'], label=r'$\mathcal{L}_{Gauge}$')
     plt.semilogy(hist['maxwell_den_loss'], label=r'$\mathcal{L}_{maxwell_den}$')
     plt.semilogy(hist['maxwell_curx_loss'], label=r'$\mathcal{L}_{maxwell_curx}$')
-    plt.semilogy(hist['maxwell_cury_loss'], label = r'mathcal{L}_{maxwell_cury}')
+    plt.semilogy(hist['maxwell_cury_loss'], label = r'$\mathcal{L}_{maxwell_cury}$')
     plt.semilogy(hist['wave_Ax_loss'], label=r'$\mathcal{L}_{Ax Wave}$')
     plt.semilogy(hist['wave_Ay_loss'], label=r'$\mathcal{L}_{Ay Wave}$')
     plt.semilogy(hist['wave_phi_loss'], label=r'$\mathcal{L}_{\phi Wave}$')
@@ -837,11 +837,11 @@ def plot_loss_histories(hist):
     plt.legend()
     plt.tight_layout()
     plt.show()
-    plt.savefig("XWave_loss_hist")
+    # plt.savefig("XWave_loss_hist")
     
     return
 
-def plot_reconstructed_quantities(device, model, extent, Nt, Nx, means, stds):
+def plot_reconstructed_quantities(device, model, extent, quantities_GT, Nt, Nx, means, stds):
     
     dx = extent[3] - extent[2]
     dt = extent[1] - extent[0]
@@ -862,9 +862,9 @@ def plot_reconstructed_quantities(device, model, extent, Nt, Nx, means, stds):
     Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape = True, dims = (Nt, Nx))
     Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
     Ay_pred = tensor_to_np(predictions[:,3:4], reshape = True, dims = (Nt, Nx))
-    Vx_pred = tensor_to_np(predictions[:, 5:6], reshape = True, dims = (Nt, Nx))
-    Vy_pred = tensor_to_np(predictions[:, 6:7], reshape = True, dims = (Nt, Nx))
-    N_pred = tensor_to_np(predictions[:, 7:8], reshape = True, dims = (Nt, Nx))
+    Vx_pred = tensor_to_np(predictions[:, 4:5], reshape = True, dims = (Nt, Nx))
+    Vy_pred = tensor_to_np(predictions[:, 5:6], reshape = True, dims = (Nt, Nx))
+    N_pred = tensor_to_np(predictions[:, 6:7], reshape = True, dims = (Nt, Nx))
      
     
     # Plotting the reconstructed quantities
@@ -884,7 +884,7 @@ def plot_reconstructed_quantities(device, model, extent, Nt, Nx, means, stds):
               'PuOr', 'RdGy', 'RdBu',
               'RdYlBu', 'RdYlGn', 'bwr']
     
-    for ax, quantity, ground_truth, title, color in zip(axes.flatten(), predictions, ground_truths, titles, colors):
+    for ax, quantity, title, ground_truth, color in zip(axes.flatten(), predictions, titles, ground_truths, colors):
         im = ax.imshow(quantity, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', vmin = -np.max(np.abs(ground_truth)), vmax = np.max(np.abs(ground_truth)), cmap=color)
         ax.set_title(title, fontsize=25)
         ax.set_xlabel(r'$x \left[\frac{c}{\omega_{pe}}\right]$')
@@ -894,7 +894,7 @@ def plot_reconstructed_quantities(device, model, extent, Nt, Nx, means, stds):
     plt.tight_layout()
     plt.suptitle("Reconstructed Quantities from PINN", fontsize=30)
     plt.show()
-    plt.savefig("XWave_reconstructed_quantities")
+    # plt.savefig("XWave_reconstructed_quantities")
     
 def plot_reconstructed_quantities_residuals(device, model, extent, Nt, Nx, means, stds):
     
@@ -975,9 +975,9 @@ def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, s
     Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape=True, dims=(Nt, Nx))
     Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
     Ay_pred = tensor_to_np(predictions[:,3:4], reshape = True, dims = (Nt, Nx))
-    Vx_pred = tensor_to_np(predictions[:, 7:8], reshape=True, dims=(Nt, Nx))
-    Vy_pred = tensor_to_np(predictions[:, 8:9], reshape=True, dims=(Nt, Nx))
-    N_pred = tensor_to_np(predictions[:, 9:10], reshape=True, dims=(Nt, Nx))
+    Vx_pred = tensor_to_np(predictions[:, 4:5], reshape=True, dims=(Nt, Nx))
+    Vy_pred = tensor_to_np(predictions[:, 5:6], reshape=True, dims=(Nt, Nx))
+    N_pred = tensor_to_np(predictions[:, 6:7], reshape=True, dims=(Nt, Nx))
     
     
     
@@ -992,7 +992,7 @@ def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, s
                      r'$n_e$']
     
     for pred, gt, quant_str in zip([phi_pred, Bdot_pred, Ax_pred, Ay_pred, Vx_pred, Vy_pred, N_pred], ground_truths, quantities_str):
-        rel_error = np.sqrt(np.mean((pred - gt)**2)) / np.var(gt)
+        rel_error = np.sqrt(np.mean((pred - gt)**2))/np.var(gt)
         print(f"Relative error {quant_str}: ", rel_error)
         rel_errors.append(rel_error)
     
@@ -1112,9 +1112,10 @@ def run_ddp_training(rank, world_size, params):
     
     # Save model only from rank 0
     if rank == 0:
+        print("\nTraining complete. Saving model and history...")
         # Save state_dict for DDP model. Use model.module.state_dict() for actual model weights
         # because DDP wraps the original model.
-        torch.save(model.module.state_dict(), f"ddp_xwave_pinn_model.pt")
+        torch.save(model.module.state_dict(), "ddp_xwave_model.pt")
         # Save history
         with open(f"ddp_xwave_hist.pkl", "wb") as f:
             pickle.dump(hist, f)
@@ -1154,7 +1155,7 @@ def main():
 
     params = {
         'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
-        'num_hidden_layers': 4,
+        'num_hidden_layers': 3,
         'hidden_size': 50,
         'activation': 'sin',
         'init': 'xavier',
@@ -1163,8 +1164,8 @@ def main():
         'output_size': 7, # Number of outputs: phi, Bdot, Ax, Ay, Vx, Vy, N_e
 
         # Training parameters
-        'num_epochs': 2000,
-        'n_batches': 32, # Number of collocation batches per epoch per GPU
+        'num_epochs': 1000,
+        'n_batches': 64, # Number of collocation batches per epoch per GPU
         'lr': 1e-4, 
         'lamda': 1.0,
 
