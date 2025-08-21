@@ -157,16 +157,19 @@ def phase_factor(delta):
 def analytical_solution(x, t, omega, k, phi_amp, delta):
     
     phi_amp *= phase_factor(delta)
-    B0 = np.sqrt((omega**2 - k**2 - 1)*(omega**2 - 1)/(omega**2 - k**2)) #Required B0 to ensure momentum constraints satisfied
-    Ay_amp  = 1j*((omega**2/k)-(1/k))*phi_amp/B0                              #Required A1y amp to ensure momentum constraints satisfied
     
+    B0_sq_num = ((omega**2)-(k**2)-1)*((omega**2)-1)
+    B0_sq_denom = ((omega**2)-(k**2))
+    B0 = np.sqrt(B0_sq_num / B0_sq_denom)                                     #We Choose A1y and B0 such that all constraints are satisfied.
+        
     phase = np.exp(1j*(k*x - omega*t))
     
     phi = phi_amp * phase
     
     # Perturbed Vector Potential A1
+    A1y_amp  = 1j*(phi_amp/B0)*(((omega**2)/k) - (1/k))
     A1x = (omega/k)*phi
-    A1y = Ay_amp * phase
+    A1y = A1y_amp * phase
     
     # Electron density perturbation N = n_e - n_0
     N = ((omega**2) - (k**2))*phi
@@ -229,15 +232,14 @@ def derivative_xx(f, dx):
 
     return f_xx
 
-
 def derivative_xt(f,dx,dt):
     f_xt = np.zeros_like(f)
     
     f_xt[:,1:-1] = (f[:,2:] - 2.0*f[:,1:-1] + f[:,0:-2]) / dx*dt                  # 2nd order accurate central difference stencil (interior)
     f_xt[:,0] = (2.0*f[:,0] - 5.0*f[:,1] + 4.0*f[:,2] - 1.0*f[:,3]) / dx*dt       # 2nd order accurate forward difference stencil (x_0 edge)
     f_xt[:,-1] = (2.0*f[:,-1] - 5.0*f[:,-2] + 4.0*f[:,-3] - 1.0*f[:,-4]) / dx*dt  # 2nd order accurate backward difference stencil (x_f edge)
- 
     return f_xt
+
 
 def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, delta_list):
 
@@ -273,9 +275,9 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega
         B0 += temp_B0
         
 
-    return x_arr.flatten(), t_arr.flatten(), np.real(phi).flatten(), np.real(Bdot).flatten(), \
-            np.real(A1x).flatten(), np.real(A1y).flatten(), \
-            np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten(), np.real(B0).flatten()
+    return x_arr.flatten(), t_arr.flatten(), phi.flatten(), Bdot.flatten(), \
+            A1x.flatten(), A1y.flatten(), \
+            Vx.flatten(), Vy.flatten(), N.flatten(), B0.flatten()
 
 
 def sparse_measurements(x, t, phi, Bdot, num_samples):
@@ -635,17 +637,17 @@ def pde_residuals(model, t, x, B0_amp, means, stds):
         
         #Don't need derivatives for Vx, Vy, N, or Bdot
         
-        residuals[:, 0:1] = Ax_x + phi_x                        #Gauge
-        residuals[:, 1:2] = phi_xx + Ax_xt - N                  #Maxwell_den
-        residuals[:, 2:3] = -Ax_tt - phi_xt - Vx                #Maxwell_curx
-        residuals[:, 3:4] = Ay_xx - Ay_tt - Ax_xx - phi_xt - Vy #Maxwell_cury
-        residuals[:, 4:5] = Ax_xx - Ax_tt - Vx                  #Wave_Ax
-        residuals[:, 5:6] = Ay_xx - Ay_tt - Vy                  #Wave_Ay  
-        residuals[:, 6:7] = phi_xx - phi_tt - N                 #Wave_phi 
-        residuals[:, 7:8] = Bdot - Ay_xt                        #B_curl(A)
-        residuals[:, 8:9] = Vx_t - (phi_x + Ax_t) + Vy*B0_amp   #Momentum_x        
-        residuals[:, 9:10] = Vy_t - Ay_t - Vx*B0_amp            #Momentum_y
-        residuals[:, 10:11] = N_t + Vx_x                        #continuity
+        residuals[:, 0:1] = Ax_x + phi_t                        #Gauge
+        residuals[:, 1:2] = phi_xx + Ax_xt - N                  #Gauss's Law
+        residuals[:, 2:3] = Ax_tt + phi_xt + Vx                 #Ampere's Law x
+        residuals[:, 3:4] = Ay_tt - Ay_xx + Vy                  #Ampere's Law y
+        # residuals[:, 4:5] = Ax_xx - Ax_tt - Vx                  #Wave_Ax
+        # residuals[:, 5:6] = Ay_xx - Ay_tt - Vy                  #Wave_Ay  
+        # residuals[:, 6:7] = phi_xx - phi_tt - N                 #Wave_phi 
+        residuals[:, 4:5] = Bdot - Ay_xt                        #time_derivative of B field
+        residuals[:, 5:6] = Vx_t - phi_x - Ax_t + Vy*B0_amp   #Momentum_x
+        residuals[:, 6:7] = Vy_t - Ay_t - Vx*B0_amp             #Momentum_y
+        residuals[:, 7:8] = N_t + Vx_x                          #continuity
         
     else:
         residuals.fill_(0.0)  # If gradients are not enabled, set residuals to zero
@@ -665,38 +667,35 @@ def get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank):
     residuals = pde_residuals(model, t_coll, x_coll, B0_amp, means, stds)
     
     gauge_res = residuals[:, 0:1]
-    maxwell_den_res = residuals[:, 1:2]
-    maxwell_curx_res = residuals[:, 2:3]
-    maxwell_cury_res = residuals[:, 3:4]
-    wave_Ax_res = residuals[:, 4:5]
-    wave_Ay_res = residuals[:, 5:6]
-    wave_phi_res = residuals[:, 6:7]
-    bdot_curlA_res = residuals[:, 7:8]
-    momentum_x_res = residuals[:, 8:9]
-    momentum_y_res = residuals[:, 9:10]
-    continuity_res = residuals[:, 10:11]
+    gauss_law_res = residuals[:, 1:2]
+    ampere_x_res = residuals[:, 2:3]
+    ampere_y_res = residuals[:, 3:4]
+    bdot_curlA_res = residuals[:, 4:5]
+    momentum_x_res = residuals[:, 5:6]
+    momentum_x_res_copy = torch.abs(momentum_x_res.clone())
+    momentum_x_res -= torch.mean(momentum_x_res_copy)  # Remove the mean value from the momentum_x residuals
+    momentum_y_res = residuals[:, 5:6]
+    momentum_y_res_copy = torch.abs(momentum_y_res.clone())
+    momentum_y_res -= torch.mean(momentum_y_res_copy) #remove the mean value from the momentum_y residuals
+    
+    continuity_res = residuals[:, 6:7]
     
     gauge_loss = torch.mean(gauge_res**2)
-    maxwell_den_loss = torch.mean(maxwell_den_res**2)
-    maxwell_curx_loss = torch.mean(maxwell_curx_res**2)
-    maxwell_cury_loss = torch.mean(maxwell_cury_res**2)
-    wave_Ax_loss = torch.mean(wave_Ax_res**2)
-    wave_Ay_loss = torch.mean(wave_Ay_res**2)
-    wave_phi_loss = torch.mean(wave_phi_res**2)
+    gauss_law_loss = torch.mean(gauss_law_res**2)
+    ampere_x_loss = torch.mean(ampere_x_res**2)
+    ampere_y_loss = torch.mean(ampere_y_res**2)
     bdot_curlA_loss = torch.mean(bdot_curlA_res**2)
     momentum_x_loss = torch.mean(momentum_x_res**2)
     momentum_y_loss = torch.mean(momentum_y_res**2)
     continuity_loss = torch.mean(continuity_res**2)
     
     
-    physics_loss =  gauge_loss + maxwell_den_loss + maxwell_curx_loss + maxwell_cury_loss + \
-                    wave_Ax_loss + wave_Ay_loss + wave_phi_loss + bdot_curlA_loss + \
-                    momentum_x_loss + momentum_y_loss + continuity_loss
+    physics_loss =  gauge_loss + gauss_law_loss + ampere_x_loss + ampere_y_loss + \
+                    bdot_curlA_loss + momentum_x_loss + momentum_y_loss + continuity_loss
                     
     
-    return  physics_loss, gauge_loss, maxwell_den_loss, maxwell_curx_loss, maxwell_cury_loss, wave_Ax_loss, \
-            wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
-            momentum_y_loss, continuity_loss
+    return  physics_loss, gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
+            bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss
 
 
 def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank):
@@ -720,22 +719,20 @@ def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds,
 
 def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, rank, lamda=1.0):
     
-    physics_loss, gauge_loss, maxwell_den_loss, maxwell_curx_loss, maxwell_cury_loss, wave_Ax_loss, \
-    wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
-    momentum_y_loss, continuity_loss = get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank)
+    physics_loss, gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
+    bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss = get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank)
     
     sm_loss = get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank)
     
     loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
     
     return  loss, sm_loss, physics_loss, \
-            gauge_loss, maxwell_den_loss, maxwell_curx_loss, maxwell_cury_loss, wave_Ax_loss, \
-            wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
-            momentum_y_loss, continuity_loss
+            gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
+            bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss
 
-def write_loss(hist, loss, sm_loss, physics_loss, gauge_loss, maxwell_den_loss, 
-               maxwell_curx_loss, maxwell_cury_loss, wave_Ax_loss, wave_Ay_loss, wave_phi_loss,
-               bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss):
+def write_loss(hist, loss, sm_loss, physics_loss, 
+               gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss,
+                bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss):
     
     """Writes the loss history to a dictionary"""
     
@@ -743,12 +740,9 @@ def write_loss(hist, loss, sm_loss, physics_loss, gauge_loss, maxwell_den_loss,
     hist['sm_loss'].append(sm_loss.item())
     hist['physics_loss'].append(physics_loss.item())
     hist['gauge_loss'].append(gauge_loss.item())
-    hist['maxwell_den_loss'].append(maxwell_den_loss.item())
-    hist['maxwell_curx_loss'].append(maxwell_curx_loss.item())
-    hist['maxwell_cury_loss'].append(maxwell_cury_loss.item())
-    hist['wave_Ax_loss'].append(wave_Ax_loss.item())
-    hist['wave_Ay_loss'].append(wave_Ay_loss.item())
-    hist['wave_phi_loss'].append(wave_phi_loss.item())
+    hist['gauss_loss'].append(gauss_law_loss.item())
+    hist['ampere_x_loss'].append(ampere_x_loss.item())
+    hist['ampere_y_loss'].append(ampere_y_loss.item())
     hist['bdot_curlA_loss'].append(bdot_curlA_loss.item())
     hist['momentum_x_loss'].append(momentum_x_loss.item())
     hist['momentum_y_loss'].append(momentum_y_loss.item())
@@ -784,9 +778,8 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             optimizer.zero_grad() #clear the gradients of our optimizer 
             
             loss, sm_loss, physics_loss, \
-            gauge_loss, maxwell_den_loss, maxwell_curx_loss, maxwell_cury_loss, wave_Ax_loss, \
-            wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
-            momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
+            gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, bdot_curlA_loss, \
+            momentum_x_loss, momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
                                                                         Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
                                                                         rank, lamda)
             
@@ -795,10 +788,9 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             
             #update our loss history only for rank 0 
             if rank == 0:
-                hist = write_loss(hist, loss, sm_loss, physics_loss, \
-                                 gauge_loss, maxwell_den_loss, maxwell_curx_loss, maxwell_cury_loss, wave_Ax_loss, \
-                                 wave_Ay_loss, wave_phi_loss, bdot_curlA_loss, momentum_x_loss, \
-                                 momentum_y_loss, continuity_loss)
+                hist = write_loss(hist, loss, sm_loss, physics_loss,
+                                    gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss,
+                                    bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss)
             
             old_lr = get_lr(optimizer) #get the current learning rate
             scheduler.step(loss) #update the learning rate using the scheduler based on the loss
@@ -837,12 +829,9 @@ def plot_loss_histories(hist):
     plt.ylabel("Loss (arbitrary units)")
     
     plt.semilogy(hist['gauge_loss'], label=r'$\mathcal{L}_{Gauge}$')
-    plt.semilogy(hist['maxwell_den_loss'], label=r'$\mathcal{L}_{maxwell_den}$')
-    plt.semilogy(hist['maxwell_curx_loss'], label=r'$\mathcal{L}_{maxwell_curx}$')
-    plt.semilogy(hist['maxwell_cury_loss'], label = r'$\mathcal{L}_{maxwell_cury}$')
-    plt.semilogy(hist['wave_Ax_loss'], label=r'$\mathcal{L}_{Ax Wave}$')
-    plt.semilogy(hist['wave_Ay_loss'], label=r'$\mathcal{L}_{Ay Wave}$')
-    plt.semilogy(hist['wave_phi_loss'], label=r'$\mathcal{L}_{\phi Wave}$')
+    plt.semilogy(hist['gauss_law_loss'], label=r'$\mathcal{L}_{Gauss}$')
+    plt.semilogy(hist['ampere_x_loss'], label=r'$\mathcal{L}_{ampere_{x}}$')
+    plt.semilogy(hist['ampere_y_loss'], label = r'$\mathcal{L}_{ampere_{y}}$')
     plt.semilogy(hist['bdot_curlA_loss'], label=r'$\mathcal{L}_{bdot_curl(A)}$')
     plt.semilogy(hist['momentum_x_loss'], label=r'$\mathcal{L}_{Momentum_x}$')
     plt.semilogy(hist['momentum_y_loss'], label=r'$\mathcal{L}_{Momentum_y}$')
@@ -855,182 +844,7 @@ def plot_loss_histories(hist):
     
     return
 
-def plot_reconstructed_quantities(device, model, extent, quantities_GT, Nt, Nx, means, stds):
-    
-    dx = extent[3] - extent[2]
-    dt = extent[1] - extent[0]
-    
-    T = np.linspace(extent[0], extent[1], Nt)
-    X = np.linspace(extent[2], extent[3], Nx)
-    
-    XX, TT = np.meshgrid(X, T)
-    
-    TT_tensor = torch.tensor(TT.flatten().reshape(-1,1), dtype=torch.float32, device=device, requires_grad=False)
-    XX_tensor = torch.tensor(XX.flatten().reshape(-1,1), dtype=torch.float32, device=device, requires_grad=False)
-    
-    with torch.no_grad():
-        model.eval()
-        predictions = (model(TT_tensor, XX_tensor) * stds + means) #model predictions
-    
-    phi_pred = tensor_to_np(predictions[:, 0:1], reshape = True, dims = (Nt, Nx))
-    Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape = True, dims = (Nt, Nx))
-    Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
-    Ay_pred = tensor_to_np(predictions[:,3:4], reshape = True, dims = (Nt, Nx))
-    Vx_pred = tensor_to_np(predictions[:, 4:5], reshape = True, dims = (Nt, Nx))
-    Vy_pred = tensor_to_np(predictions[:, 5:6], reshape = True, dims = (Nt, Nx))
-    N_pred = tensor_to_np(predictions[:, 6:7], reshape = True, dims = (Nt, Nx))
-     
-    
-    # Plotting the reconstructed quantities
-    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(25, 25))
-    
-    predictions = [phi_pred, Bdot_pred, Ax_pred, Ay_pred, Vx_pred, Vy_pred, N_pred]
-    ground_truths = quantities_GT
-    titles = [r'$\hat{\phi}$', 
-              r'$\hat{\dot{B}}$', 
-              r'$\hat{Ax}$',
-              r'$\hat{Ay}$',
-              r'$\hat{V_x}$', 
-              r'$\hat{V_y}$', 
-              r'$\hat{N_e}$']
-    
-    colors = ['PiYG', 'PRGn', 'BrBG',
-              'PuOr', 'RdGy', 'RdBu',
-              'RdYlBu', 'RdYlGn', 'bwr']
-    
-    for ax, quantity, title, ground_truth, color in zip(axes.flatten(), predictions, titles, ground_truths, colors):
-        im = ax.imshow(quantity, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', vmin = -np.max(np.abs(ground_truth)), vmax = np.max(np.abs(ground_truth)), cmap=color)
-        ax.set_title(title, fontsize=25)
-        ax.set_xlabel(r'$x \left[\frac{c}{\omega_{pe}}\right]$')
-        ax.set_ylabel(r'$t \left[\omega_{pe}^{-1}\right]$')
-        fig.colorbar(im, ax=ax)
-    
-    plt.tight_layout()
-    plt.suptitle("Reconstructed Quantities from PINN", fontsize=30)
-    plt.show()
-    # plt.savefig("XWave_reconstructed_quantities")
-    
-def plot_reconstructed_quantities_residuals(device, model, extent, Nt, Nx, means, stds):
-    
-    """Plot the residuals of the reconstructed quantities.
-    -Warning: Might run out of memeory for large Nt and Nx."""
-    
-    T = np.linspace(extent[0], extent[1], Nt)
-    X = np.linspace(extent[2], extent[3], Nx)
-    
-    dt = (extent[1] - extent[0])/Nt
-    dx = (extent[3] - extent[2])/Nx
-    
-    XX, TT = np.meshgrid(X, T)
-    
-    TT_tensor = torch.tensor(TT.flatten().reshape(-1,1), dtype=torch.float32, device=device, requires_grad=True)
-    XX_tensor = torch.tensor(XX.flatten().reshape(-1,1), dtype=torch.float32, device=device, requires_grad=True)
-    
-    residuals = pde_residuals(model, TT_tensor, XX_tensor, means, stds)
-    
-    gauge_res = tensor_to_np(residuals[:, 0:1], reshape=True, dims=(Nt, Nx))
-    maxwell_1x_res = tensor_to_np(residuals[:, 1:2], reshape=True, dims=(Nt, Nx))
-    maxwell_2x_res = tensor_to_np(residuals[:, 2:3], reshape=True, dims=(Nt, Nx))
-    maxwell_2y_res = tensor_to_np(residuals[:, 3:4], reshape = True, dims = (Nt, Nx))
-    wave_Ax_res = tensor_to_np(residuals[:, 4:5], reshape = True, dims = (Nt, Nx))
-    wave_Ay_res = tensor_to_np(residuals[:, 5:6], reshape = True, dims = (Nt, Nx))
-    wave_phi_res = tensor_to_np(residuals[:, 6:7], reshape=True, dims=(Nt, Nx))
-    bdot_curlA_res = tensor_to_np(residuals[:, 7:8], reshape=True, dims=(Nt, Nx))
-    momentum_x_res = tensor_to_np(residuals[:, 8:9], reshape=True, dims=(Nt, Nx))
-    momentum_y_res = tensor_to_np(residuals[:, 9:10], reshape=True, dims=(Nt, Nx))
-    continuity_res = tensor_to_np(residuals[:, 10:11], reshape=True, dims=(Nt, Nx))
 
-    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
-    titles = [r'$|\partial_x A_x + \partial_t \phi|$', 
-              r'$|\partial_x^2 \phi + \partial_{xt}^2 A_x - n_e|$', 
-              r'$|\partial_t^2 A_x - \partial_{xt}^2 \phi + v_x|$',
-              r'$|-\partial_x^2 A_y - \partial_{tt}^2 A_y + v_y|$', 
-              r'$|\partial_x^2 A_x - \partial_t^2 A_x + v_x|$', 
-              r'$|\partial_x^2 A_y - \partial_t^2 A_y + v_y|$', 
-              r'$|\partial_x^2 \phi - \partial_t^2 \phi + n_e|$',
-              r'$|\dot{B} - \partial^2_{xt} A_y|$', 
-              r'$|\partial_t v_x - (\partial_x \phi + \partial_t A_x) + v_y B_0|$',
-              r'$|\partial_t v_y - \partial_t A_y - v_x B_0|$',
-              r'$|\partial_t n_e + \partial_x v_x|$']
-    
-    quantities = [gauge_res, maxwell_1x_res, maxwell_2x_res, maxwell_2y_res, wave_Ax_res, 
-                 wave_Ay_res, wave_phi_res, bdot_curlA_res, momentum_x_res, 
-                 momentum_y_res, continuity_res]
-    
-    for ax, quantity, title in zip(axes.flatten(), quantities, titles):
-        im = ax.imshow(quantity, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', cmap='Reds')
-        ax.set_title(title, fontsize=25)
-        ax.set_xlabel(r'$x \left[\frac{c}{\omega_{pe}}\right]$')
-        ax.set_ylabel(r'$t \left[\omega_{pe}^{-1}\right]$')
-        fig.colorbar(im, ax=ax)
-    
-    plt.tight_layout()
-    plt.show()
-    plt.savefig("reconstructed_quantities_residuals")
-    
-    return 
-
-def plot_reconstructed_quantities_errors(device, model, extent, Nt, Nx, means, stds, ground_truths):
-    
-    #ground_truts = [Ex_GT, Ey_GT, Bz_GT, Vx_GT, Vy_GT, N_GT, P_x_GT, phi_GT, Bdot_GT]
-    
-    T = np.linspace(extent[0], extent[1], Nt)
-    X = np.linspace(extent[2], extent[3], Nx)
-    
-    XX,TT = np.meshgrid(X, T)
-    
-    TT_tensor = torch.tensor(TT.flatten().reshape(-1,1), requires_grad=False, dtype=torch.float32, device=device)
-    XX_tensor = torch.tensor(XX.flatten().reshape(-1,1), requires_grad=False, dtype=torch.float32, device=device)
-    
-    with torch.no_grad():
-        predictions = (model(TT_tensor, XX_tensor) * stds + means)
-    
-    phi_pred = tensor_to_np(predictions[:, 0:1], reshape=True, dims=(Nt, Nx))
-    Bdot_pred = tensor_to_np(predictions[:, 1:2], reshape=True, dims=(Nt, Nx))
-    Ax_pred = tensor_to_np(predictions[:,2:3], reshape = True, dims = (Nt, Nx))
-    Ay_pred = tensor_to_np(predictions[:,3:4], reshape = True, dims = (Nt, Nx))
-    Vx_pred = tensor_to_np(predictions[:, 4:5], reshape=True, dims=(Nt, Nx))
-    Vy_pred = tensor_to_np(predictions[:, 5:6], reshape=True, dims=(Nt, Nx))
-    N_pred = tensor_to_np(predictions[:, 6:7], reshape=True, dims=(Nt, Nx))
-    
-    
-    
-    #Plotting th relative errors of the reconstructed quantities
-    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(25, 25))
-    
-    rel_errors = []
-    quantities_str = [r'$\phi$', 
-                     r'$\dot{B}$',
-                     r'$A_x', r'$A_y$', 
-                     r'$v_x$', r'$v_y$', 
-                     r'$n_e$']
-    
-    for pred, gt, quant_str in zip([phi_pred, Bdot_pred, Ax_pred, Ay_pred, Vx_pred, Vy_pred, N_pred], ground_truths, quantities_str):
-        rel_error = np.sqrt(np.mean((pred - gt)**2))/np.var(gt)
-        print(f"Relative error {quant_str}: ", rel_error)
-        rel_errors.append(rel_error)
-    
-    error_titles = [r'$|\phi - \hat{\phi}|$',
-                    r'$|\dot{B} - \hat{\dot{B}}|$'
-                    r'$|A_x - \hat{A_x}|$', 
-                    r'$|A_y - \hat{A_y}|$',
-                    r'$|v_x - \hat{v_x}|$',
-                    r'$|v_y - \hat{v_y}|$',
-                    r'$|n_e - \hat{n_e}|$']
-    
-    for ax, rel_error, title in zip(axes.flatten(), rel_errors, error_titles):
-        im = ax.imshow(rel_error, aspect='auto', extent=[extent[2], extent[3], extent[0], extent[1]], origin='lower', cmap='bwr')
-        ax.set_title(title, fontsize=25)
-        ax.set_xlabel(r'$x \left[\frac{c}{\omega_{pe}}\right]$')
-        ax.set_ylabel(r'$t \left[\omega_{pe}^{-1}\right]$')
-        fig.colorbar(im, ax=ax)
-    
-    plt.tight_layout()
-    plt.suptitle("Relative Errors of Reconstructed Quantities", fontsize=30)
-    plt.show()
-    plt.savefig("reconstructed_quantities_errors")
-    
-    return 
 
 
 def run_ddp_training(rank, world_size, params):
@@ -1110,10 +924,8 @@ def run_ddp_training(rank, world_size, params):
     
     hist = {
         'loss': [], 'sm_loss': [], 'physics_loss': [],
-        'gauge_loss': [], 'maxwell_den_loss': [], 'maxwell_curx_loss': [],
-        'maxwell_cury_loss': [], 'wave_Ax_loss': [], 'wave_Ay_loss': [],
-        'wave_phi_loss': [], 'bdot_curlA_loss':[], 'momentum_x_loss': [], 'momentum_y_loss': [],
-        'continuity_loss':[]}
+        'gauge_loss': [], 'gauss_law_loss': [], 'ampere_x_loss': [], 'ampere_y_loss': [],
+        'bdot_curlA_loss':[], 'momentum_x_loss': [], 'momentum_y_loss': [], 'continuity_loss':[]}
     
     # Optimize the model
     model, optimizer, hist = optimize(
@@ -1175,21 +987,21 @@ def main():
         'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
         'num_hidden_layers': 3,
         'hidden_size': 50,
-        'activation': 'sin',
+        'activation': 'tanh',
         'init': 'xavier',
         'input_encoding': True,
         'sigma': 1.0,
         'output_size': 7, # Number of outputs: phi, Bdot, Ax, Ay, Vx, Vy, N_e
 
         # Training parameters
-        'num_epochs': 1000,
+        'num_epochs': 2000,
         'n_batches': 64, # Number of collocation batches per epoch per GPU
         'lr': 1e-4, 
         'lamda': 1.0,
 
         # Data generation parameters
-        'Nt': 200,
-        'Nx': 200,
+        'Nt': 2000,
+        'Nx': 2000,
         'Nt_coll': 100, # Number of collocation points for meshes
         'Nx_coll': 100, # Number of collocation points for meshes
         'num_sparse_samples': 500,
