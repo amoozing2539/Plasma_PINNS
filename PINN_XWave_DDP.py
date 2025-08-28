@@ -162,14 +162,16 @@ def analytical_solution(x, t, omega, k, phi_amp, delta):
     B0_sq_denom = ((omega**2)-(k**2))
     B0 = np.sqrt(B0_sq_num / B0_sq_denom)                                     #We Choose A1y and B0 such that all constraints are satisfied.
         
-    phase = np.exp(1j*(k*x - omega*t))
+    phase = 1j*(k*x - omega*t)
+    factor = np.exp(phase)
     
-    phi = phi_amp * phase
+    phi = phi_amp * factor
     
     # Perturbed Vector Potential A1
-    A1y_amp  = 1j*(phi_amp/B0)*(((omega**2)/k) - (1/k))
+    A1y_amp = (phi_amp/B0) * (((omega**2)/k) - (1/k))
+    A1y = A1y_amp * factor
     A1x = (omega/k)*phi
-    A1y = A1y_amp * phase
+    
     
     # Electron density perturbation N = n_e - n_0
     N = ((omega**2) - (k**2))*phi
@@ -184,7 +186,7 @@ def analytical_solution(x, t, omega, k, phi_amp, delta):
     #Background field B0 is constant.
     B0_value = np.full_like(Bdot, B0, dtype=np.complex128)
      
-    return phi, Bdot, A1x, A1y, vx, vy, N, B0_value
+    return np.real(phi), np.imag(Bdot), np.real(A1x), np.imag(A1y), np.real(vx), np.imag(vy), np.real(N), np.real(B0_value)
 
 def derivative_t(f, dt):
 
@@ -274,7 +276,12 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega
         N += temp_N
         B0 += temp_B0
         
-
+        #Return real part of all quantities
+    # return x_arr.flatten(), t_arr.flatten(), np.real(phi).flatten(), np.real(Bdot).flatten(), \
+    #         np.real(A1x).flatten(), np.real(A1y).flatten(), \
+    #         np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten(), np.real(B0).flatten()
+        
+        #Return full complex quantities of all quantities  
     return x_arr.flatten(), t_arr.flatten(), phi.flatten(), Bdot.flatten(), \
             A1x.flatten(), A1y.flatten(), \
             Vx.flatten(), Vy.flatten(), N.flatten(), B0.flatten()
@@ -585,6 +592,7 @@ def pde_residuals(model, t, x, B0_amp, means, stds):
     
     device = t.device
     B0_amp = B0_amp.to(device)
+    B0_amp_value = B0_amp
     
     # Set requires_grad on inputs if needed
     if grad_enabled and not t.requires_grad:
@@ -639,13 +647,13 @@ def pde_residuals(model, t, x, B0_amp, means, stds):
         
         residuals[:, 0:1] = Ax_x + phi_t                        #Gauge
         residuals[:, 1:2] = phi_xx + Ax_xt - N                  #Gauss's Law
-        residuals[:, 2:3] = Ax_tt + phi_xt + Vx                 #Ampere's Law x
+        residuals[:, 2:3] = Ax_tt + phi_xt - Vx                 #Ampere's Law x
         residuals[:, 3:4] = Ay_tt - Ay_xx + Vy                  #Ampere's Law y
         # residuals[:, 4:5] = Ax_xx - Ax_tt - Vx                  #Wave_Ax
         # residuals[:, 5:6] = Ay_xx - Ay_tt - Vy                  #Wave_Ay  
         # residuals[:, 6:7] = phi_xx - phi_tt - N                 #Wave_phi 
         residuals[:, 4:5] = Bdot - Ay_xt                        #time_derivative of B field
-        residuals[:, 5:6] = Vx_t - phi_x - Ax_t + Vy*B0_amp   #Momentum_x
+        residuals[:, 5:6] = Vx_t - phi_x - Ax_t - Vy*B0_amp     #Momentum_x
         residuals[:, 6:7] = Vy_t - Ay_t - Vx*B0_amp             #Momentum_y
         residuals[:, 7:8] = N_t + Vx_x                          #continuity
         
@@ -689,7 +697,7 @@ def get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank):
     momentum_y_loss = torch.mean(momentum_y_res**2)
     continuity_loss = torch.mean(continuity_res**2)
     
-    
+    #coefficients are loss weighting
     physics_loss =  gauge_loss + gauss_law_loss + ampere_x_loss + ampere_y_loss + \
                     bdot_curlA_loss + momentum_x_loss + momentum_y_loss + continuity_loss
                     
@@ -724,7 +732,7 @@ def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x
     
     sm_loss = get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank)
     
-    loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
+    loss = lamda*sm_loss + physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
     
     return  loss, sm_loss, physics_loss, \
             gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
@@ -781,7 +789,7 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, bdot_curlA_loss, \
             momentum_x_loss, momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
                                                                         Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
-                                                                        rank, lamda)
+                                                                        rank, lamda=10.)
             
             loss.backward() #calculate the gradients of the loss w.r.t. the model parameters. Backwards pass
             optimizer.step() #update the model parameters using the optimizer *magic*
@@ -829,7 +837,7 @@ def plot_loss_histories(hist):
     plt.ylabel("Loss (arbitrary units)")
     
     plt.semilogy(hist['gauge_loss'], label=r'$\mathcal{L}_{Gauge}$')
-    plt.semilogy(hist['gauss_law_loss'], label=r'$\mathcal{L}_{Gauss}$')
+    plt.semilogy(hist['gauss_loss'], label=r'$\mathcal{L}_{Gauss}$')
     plt.semilogy(hist['ampere_x_loss'], label=r'$\mathcal{L}_{ampere_{x}}$')
     plt.semilogy(hist['ampere_y_loss'], label = r'$\mathcal{L}_{ampere_{y}}$')
     plt.semilogy(hist['bdot_curlA_loss'], label=r'$\mathcal{L}_{bdot_curl(A)}$')
@@ -924,7 +932,7 @@ def run_ddp_training(rank, world_size, params):
     
     hist = {
         'loss': [], 'sm_loss': [], 'physics_loss': [],
-        'gauge_loss': [], 'gauss_law_loss': [], 'ampere_x_loss': [], 'ampere_y_loss': [],
+        'gauge_loss': [], 'gauss_loss': [], 'ampere_x_loss': [], 'ampere_y_loss': [],
         'bdot_curlA_loss':[], 'momentum_x_loss': [], 'momentum_y_loss': [], 'continuity_loss':[]}
     
     # Optimize the model
@@ -996,15 +1004,15 @@ def main():
         # Training parameters
         'num_epochs': 2000,
         'n_batches': 64, # Number of collocation batches per epoch per GPU
-        'lr': 1e-4, 
-        'lamda': 1.0,
+        'lr': 1e-3, 
+        'lamda': 10.0,
 
         # Data generation parameters
         'Nt': 2000,
         'Nx': 2000,
-        'Nt_coll': 100, # Number of collocation points for meshes
-        'Nx_coll': 100, # Number of collocation points for meshes
-        'num_sparse_samples': 500,
+        'Nt_coll': 200, # Total collocation points = Nt_coll * Nx_coll
+        'Nx_coll': 200, 
+        'num_sparse_samples': 500, #~5% of our collocation points
         'omega_list': omega_list,
         'omega_ce': [omega_ce],     # List to match expected input format
         'omega_pe': [omega_pe],     # List to match expected input format
