@@ -117,31 +117,21 @@ def get_lr(optimizer) -> float:
   
     
 #calculate k from dispersion relation
-def dispersion(omega, omega_ce, omega_pe, vth):
+def dispersion(omega, omega_ce):
     """
     Function to calculate the wave number k and the normalized wave number k_lambda_D.
     
     Inputs:
     -omega(float):  wave frequency normalized to plasma frequency (omega_pe)
     -omega_ce(float): electron cyclotron frequency normalized to plasma frequency (omega_pe)
-    -omega_pe(float): plasma frequency normalized to itself (usually set to 1)
     
     Outputs:
     -k(float): wave number in units of omega_pe/c
-    -k_lambda_D(float): Unitless product k*lambda_D, where lambda_D is the Debye length.
     """
     
-    omega_h_sq = omega_pe**2 + omega_ce**2
-    omega_h_factor = omega_h_sq/(omega_pe**2)
-    denom = omega**2 - omega_h_factor
+    k = np.sqrt(omega**2 - (omega**2 - 1) / (omega**2 - 1 - omega_ce**2))
     
-    k_sq_over_omega_sq = 1 - (1/omega**2)*((omega**2-1)/denom)
-    
-    k = np.sqrt(omega**2 * k_sq_over_omega_sq)
-
-    k_lambda_D = k*vth
-    
-    return k, k_lambda_D
+    return k
 
 
 def check_size_eq(lst):
@@ -154,31 +144,27 @@ def phase_factor(delta):
     return np.exp(1j*delta)
 
 
-def analytical_solution(x, t, omega, k, phi_amp, delta):
+def analytical_solution(x, t, omega_ce, omega, k, phi_amp, delta):
+    
+    B0 = omega_ce #in normalized units they are equal. Either way, the cyclotron frequency is linearly related to the background field. 
     
     phi_amp *= phase_factor(delta)
-    
-    B0_sq_num = ((omega**2)-(k**2)-1)*((omega**2)-1)
-    B0_sq_denom = ((omega**2)-(k**2))
-    B0 = np.sqrt(B0_sq_num / B0_sq_denom)                                     #We Choose A1y and B0 such that all constraints are satisfied.
         
     phase = 1j*(k*x - omega*t)
     factor = np.exp(phase)
     
     phi = phi_amp * factor
     
-    # Perturbed Vector Potential A1
-    A1y_amp = (phi_amp/B0) * (((omega**2)/k) - (1/k))
-    A1y = A1y_amp * factor
-    A1x = (omega/k)*phi
-    
-    
     # Electron density perturbation N = n_e - n_0
     N = ((omega**2) - (k**2))*phi
     
     # Perturbed electron velocities v1
     vx = (omega/k)*((omega**2) - (k**2))*phi
-    vy = ((omega**2) - (k**2))*A1y
+    vy = 1j*(1/B0)*(omega**2 - 1)*((omega**2)/k - k)*phi
+    
+    # Perturbed Vector Potential A1
+    A1x = (omega/k)*phi
+    A1y = (1/(omega**2 - k**2))*vy
     
     # Time derivative of perturbed B field (from curl of A1)
     Bdot = omega*k*A1y
@@ -243,7 +229,7 @@ def derivative_xt(f,dx,dt):
     return f_xt
 
 
-def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega_list, phi_amp_list, delta_list):
+def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_ce, omega_list, phi_amp_list, delta_list):
 
     if not check_size_eq([omega_list, phi_amp_list, delta_list]):
         raise Exception("Parameter lists are not the same size!")
@@ -263,8 +249,8 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, vth, omega_ce, omega_pe, omega
     B0 = np.zeros_like(x_arr, dtype=np.complex128)
 
     for i in range(len(omega_list)):
-        k, _ = dispersion(omega=omega_list[i], omega_ce=omega_ce, omega_pe=omega_pe, vth=vth)
-        temp_phi, temp_Bdot, temp_A1x, temp_A1y, temp_Vx, temp_Vy, temp_N, temp_B0 = analytical_solution(x=x_arr, t=t_arr, omega=omega_list[i],
+        k = dispersion(omega=omega_list[i], omega_ce=omega_ce)
+        temp_phi, temp_Bdot, temp_A1x, temp_A1y, temp_Vx, temp_Vy, temp_N, temp_B0 = analytical_solution(x=x_arr, t=t_arr, omega_ce = omega_ce, omega=omega_list[i],
                                                                                                 k=k, phi_amp=phi_amp_list[i],
                                                                                                 delta=delta_list[i])
         phi += temp_phi
@@ -511,18 +497,21 @@ class MLP(nn.Module):
         self.encoded_size = hidden_size 
         
         if self.input_encoding:
-            self.input_size = 2 * hidden_size #if input encoding is used, the input size is doubled
+            self.input_size = 2 * self.encoded_size #if input encoding is used, the input size is doubled
         
         self.B = np_to_tensor(np.random.normal(scale=self.sigma, size=(self.encoded_size, 2)), device=device, dtype=torch.float32, requires_grad=False)
         
         #now making the real MLP network
         self.network = nn.Sequential() 
-        self.network.add_module("input_layer", nn.Linear(self.input_size, hidden_size, bias=True))
+        
+        self.network.add_module("input_linear", nn.Linear(self.input_size, self.hidden_size))
         self.network.add_module("input_activation", self.activation_fn)
+        
         for i in range(num_hidden_layers):
-            self.network.add_module(f"hidden_layer_{i}", nn.Linear(hidden_size, hidden_size, bias=True))
-            self.network.add_module(f"hidden_activation_{i}", self.activation_fn)
-        self.network.add_module("output_layer", nn.Linear(hidden_size, self.output_size)) #single output for each input
+            self.network.add_module(f"hidden_layer_{i+1}", nn.Linear(self.hidden_size, self.hidden_size))
+            self.network.add_module(f"hidden_activation_{i+1}", self.activation_fn)
+            
+        self.network.add_module("output_layer", nn.Linear(self.hidden_size, self.output_size)) #single output for each input
         
         if init is not None:
             if init == 'kaiming' or init == 'he': #Random initialization from a Gaussian distribution W -> N(0, sqrt(2/n)) n = number of inputs to the node
@@ -533,11 +522,13 @@ class MLP(nn.Module):
                 raise Exception("Invalid choice of initialization method. Choices are 'kaiming / he' or 'xavier / glorot'.")
             
         self.__repr__()
-        
+    
+     
     def __getstate__(self):
         return self.__dict__.copy()
     def __setstate__(self, state):
         return self.__dict__.update(state)
+    
     
     def forward(self, t:torch.Tensor, x:torch.Tensor) -> torch.Tensor:
         
@@ -645,15 +636,15 @@ def pde_residuals(model, t, x, B0_amp, means, stds):
         
         #Don't need derivatives for Vx, Vy, N, or Bdot
         
-        residuals[:, 0:1] = Ax_x + phi_t                        #Gauge
-        residuals[:, 1:2] = phi_xx + Ax_xt - N                  #Gauss's Law
-        residuals[:, 2:3] = Ax_tt + phi_xt - Vx                 #Ampere's Law x
-        residuals[:, 3:4] = Ay_tt - Ay_xx + Vy                  #Ampere's Law y
+        residuals[:, 0:1] = Ax_x + phi_t                        #Lorentz Gauge
+        residuals[:, 1:2] = phi_xx - phi_tt - N                 #Gauss's Law (d'Alembertian of phi = -N)
+        residuals[:, 2:3] = Ax_xx - Ax_tt - Vx                  #Ampere's Law x (d'Alembertian of Ax = -Vx)
+        residuals[:, 3:4] = Ay_xx - Ay_tt - Vy                  #Ampere's Law y (d'Alembertian of Ay = -Vy)
         # residuals[:, 4:5] = Ax_xx - Ax_tt - Vx                  #Wave_Ax
         # residuals[:, 5:6] = Ay_xx - Ay_tt - Vy                  #Wave_Ay  
         # residuals[:, 6:7] = phi_xx - phi_tt - N                 #Wave_phi 
         residuals[:, 4:5] = Bdot - Ay_xt                        #time_derivative of B field
-        residuals[:, 5:6] = Vx_t - phi_x - Ax_t - Vy*B0_amp     #Momentum_x
+        residuals[:, 5:6] = Vx_t - phi_x - Ax_t + Vy*B0_amp     #Momentum_x
         residuals[:, 6:7] = Vy_t - Ay_t - Vx*B0_amp             #Momentum_y
         residuals[:, 7:8] = N_t + Vx_x                          #continuity
         
@@ -732,7 +723,7 @@ def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x
     
     sm_loss = get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank)
     
-    loss = lamda*sm_loss + physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
+    loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
     
     return  loss, sm_loss, physics_loss, \
             gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
@@ -789,7 +780,7 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, bdot_curlA_loss, \
             momentum_x_loss, momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
                                                                         Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
-                                                                        rank, lamda=10.)
+                                                                        rank, lamda=1.)
             
             loss.backward() #calculate the gradients of the loss w.r.t. the model parameters. Backwards pass
             optimizer.step() #update the model parameters using the optimizer *magic*
@@ -866,10 +857,8 @@ def run_ddp_training(rank, world_size, params):
     #Define physical parameters 
     omega = params['omega_list'][0]
     omega_ce = params['omega_ce'][0]
-    omega_pe = params['omega_pe'][0]
     phi_amp = params['phi_amp_list'][0]
-    vth = params['vth']
-    k, k_lambda_D = dispersion(omega, omega_ce, omega_pe,vth)
+    k = dispersion(omega, omega_ce)
     lamda_wave = 2*np.pi/k
     T_wave = (2*np.pi)/omega
     xmin, xmax = 0, 3*lamda_wave
@@ -885,7 +874,7 @@ def run_ddp_training(rank, world_size, params):
     # dx_val = L/float(Nx) 
     
     X_flat_np, T_flat_np, phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np, B0_flat_np  = generate_data(
-        xmin, xmax, tmin, tmax, Nx, Nt, params['vth'], params['omega_ce'][0], params['omega_pe'][0], params['omega_list'], params['phi_amp_list'], params['delta_list']
+        xmin=xmin, xmax=xmax, tmin=tmin, tmax=tmax, nx=Nx, nt=Nt, omega_ce=params['omega_ce'][0], omega_list=params['omega_list'], phi_amp_list=params['phi_amp_list'], delta_list=params['delta_list']
     )
     
     x_sparse_np, t_sparse_np, phi_sparse_np, Bdot_sparse_np = sparse_measurements(X_flat_np, T_flat_np, phi_flat_np, Bdot_flat_np, num_samples=params['num_sparse_samples'])
@@ -928,7 +917,7 @@ def run_ddp_training(rank, world_size, params):
 
     # Define Optimizer
     optimizer = optim.Adam(model.parameters(), lr=params['lr'])
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=100, min_lr=1e-8, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=200, min_lr=1e-8, verbose=True)
     
     hist = {
         'loss': [], 'sm_loss': [], 'physics_loss': [],
@@ -979,12 +968,10 @@ def main():
     # Temporarily calculate k for lamda_wave and T_wave calculation
     # These global vars need to be set or params passed
     # It's better to pass them via `params` dict.
-    vth = 0.1 # This is used by x_wave_dispersion
-    omega_ce = 2.0 # This is used by x_wave_dispersion
-    omega_pe = 1.0 # This is used by x_wave_dispersion
+    omega_ce = .01 # This is used by x_wave_dispersion
     
     # Calculate initial physical constants to define extent
-    k_init, _ = dispersion(omega_list[0], omega_ce, omega_pe, vth)
+    k_init = dispersion(omega_list[0], omega_ce)
     lamda_wave_init = 2 * np.pi / k_init
     T_wave_init = (2 * np.pi) / omega_list[0]
     
@@ -1002,21 +989,19 @@ def main():
         'output_size': 7, # Number of outputs: phi, Bdot, Ax, Ay, Vx, Vy, N_e
 
         # Training parameters
-        'num_epochs': 2000,
-        'n_batches': 64, # Number of collocation batches per epoch per GPU
+        'num_epochs': 200,
+        'n_batches': 50, # Number of collocation batches per epoch per GPU
         'lr': 1e-3, 
-        'lamda': 10.0,
+        'lamda': 1000.,
 
         # Data generation parameters
         'Nt': 2000,
         'Nx': 2000,
         'Nt_coll': 200, # Total collocation points = Nt_coll * Nx_coll
         'Nx_coll': 200, 
-        'num_sparse_samples': 500, #~5% of our collocation points
+        'num_sparse_samples': 40000, #all of our collocation points
         'omega_list': omega_list,
         'omega_ce': [omega_ce],     # List to match expected input format
-        'omega_pe': [omega_pe],     # List to match expected input format
-        'vth': vth,                 # This is used by x_wave_dispersion
         'phi_amp_list': phi_amp_list,
         'delta_list': delta_list,
     }
