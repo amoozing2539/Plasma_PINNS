@@ -160,11 +160,11 @@ def analytical_solution(x, t, omega_ce, omega, k, phi_amp, delta):
     
     # Perturbed electron velocities v1
     vx = (omega/k)*((omega**2) - (k**2))*phi
-    vy = 1j*(1/B0)*(omega**2 - 1)*((omega**2)/k - k)*phi
+    vy = 1j*(1/B0)*(k*phi - omega*vx - omega*(omega/k)*phi)
     
     # Perturbed Vector Potential A1
     A1x = (omega/k)*phi
-    A1y = (1/(omega**2 - k**2))*vy
+    A1y = -1j*(omega_ce/omega)*vx + vy
     
     # Time derivative of perturbed B field (from curl of A1)
     Bdot = omega*k*A1y
@@ -172,7 +172,7 @@ def analytical_solution(x, t, omega_ce, omega, k, phi_amp, delta):
     #Background field B0 is constant.
     B0_value = np.full_like(Bdot, B0, dtype=np.complex128)
      
-    return np.real(phi), np.imag(Bdot), np.real(A1x), np.imag(A1y), np.real(vx), np.imag(vy), np.real(N), np.real(B0_value)
+    return np.real(phi), np.real(Bdot), np.real(A1x), np.real(A1y), np.real(vx), np.real(vy), np.real(N), np.real(B0_value)
 
 def derivative_t(f, dt):
 
@@ -268,9 +268,9 @@ def generate_data(xmin, xmax, tmin, tmax, nx, nt, omega_ce, omega_list, phi_amp_
     #         np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten(), np.real(B0).flatten()
         
         #Return full complex quantities of all quantities  
-    return x_arr.flatten(), t_arr.flatten(), phi.flatten(), Bdot.flatten(), \
-            A1x.flatten(), A1y.flatten(), \
-            Vx.flatten(), Vy.flatten(), N.flatten(), B0.flatten()
+    return x_arr.flatten(), t_arr.flatten(), np.real(phi).flatten(), np.real(Bdot).flatten(), \
+            np.real(A1x).flatten(), np.real(A1y).flatten(), \
+            np.real(Vx).flatten(), np.real(Vy).flatten(), np.real(N).flatten(), np.real(B0).flatten()
 
 
 def sparse_measurements(x, t, phi, Bdot, num_samples):
@@ -291,105 +291,6 @@ def collocation_points(xmin, xmax, tmin, tmax, Nx, Nt, L, tau):
     dt = t[1] - t[0]
 
     return x_coll.flatten(), t_coll.flatten(), dx, dt
-
-
-# def spectral_derivative(f,x):
-#     N = len(x)
-#     dx = x[1] - x[0]
-    
-#     f_hat = np.fft.fft(f)
-#     k = 2*np.pi*np.fft.fftfreq(N, d=dx)
-#     df_hat = 1j * k * f_hat
-#     df = np.fft.ifft(df_hat)
-    
-#     return df.real
-#     # L is the length of the domain (e.g., L = x_max - x_min)
-#     N = f.shape[1] # Number of points in x
-    
-#     # Create the wavenumber array
-#     k_x = 2 * np.pi * np.fft.fftfreq(N, d=L/N)
-    
-#     # Take the FFT along the x-axis
-#     f_hat = np.fft.fft(f, axis=1)
-    
-#     # Multiply by ik
-#     dfdx_hat = 1j * k_x * f_hat
-    
-#     # Inverse FFT to get the derivative
-#     dfdx = np.fft.ifft(dfdx_hat, axis=1)
-    
-#     return np.real(dfdx)
-
-
-#Plot GTs
-def plot_analytical(quantities, sparse, titles, extent):
-    """Plot the analytical solution."""
-    
-    
-    fig, axes = plt.subplots(nrows=3, ncols=3, figsize=(20, 20))
-    colors = ['PiYG', 'PRGn', 'BrBG',
-              'PuOr', 'RdGy', 'RdBu',
-              'RdYlBu', 'RdYlGn', 'bwr',
-              'seismic', 'berlin', 'vanimo']
-    x_sparse = sparse[0]
-    t_sparse = sparse[1]
-    phi_sparse = sparse[2]
-    bdot_sparse = sparse[3]
-    
-                      
-    for ax, quantity, title, color in zip(axes.flatten(), quantities, titles, colors):
-        im = ax.imshow(quantity, aspect='auto', extent=extent, origin='lower', cmap=color)
-        ax.set_title(title, fontsize = 25)
-        ax.set_xlabel(f'$x [\\frac{{c}}{{\omega_{{pe}}}}]$')
-        ax.set_ylabel('$t [\\omega_{{pe}}^{{-1}}]$')
-        fig.colorbar(im, ax=ax)
-        
-        if f'$\phi [\\frac{{m_{{e}}c^2}}{{e}}]$' in title:
-            ax.scatter(x_sparse, t_sparse, c='black', s=20, label=f'500 φ Measurements', alpha=1.)
-            ax.legend()
-        if f'$\dot{{B}} [\\frac{{e}}{{m_{{e}}c}}]$' in title:
-            ax.scatter(x_sparse, t_sparse, c='black', s=20, label=f'500 Bdot Measurements', alpha=1.)
-            ax.legend()
-            
-    
-    plt.tight_layout()
-    plt.show()
-    plt.suptitle("Ground Truth")
-    # plt.savefig("XWave_Ground_Truth_Plots")
-
-
-
-def plot_constraints(constraints, titles, extent):
-    "Plots the constraints in their current form."
-    fig, axes = plt.subplots(nrows=4, ncols=3, figsize=(20, 20))
-    
-    #adjusted titles to remove the average
-    adjusted_titles = [r'$|\partial_t V_x - \partial_t A_{1x} - \partial_x \phi + V_y B_0|$',
-                       r'$|\partial_t V_y - \partial_t A_{1y} - V_x B_0|$']
-    
-    for ax, constraint, title in zip(axes.flatten(), constraints, titles):
-        
-        #make a copy to avoid modifying the original constraint
-        plot_data = np.abs(constraint.copy())
-        
-        if title in adjusted_titles:
-            mean_value = np.mean(plot_data)
-            plot_data -= mean_value  # Remove the mean value from the constraint
-            print(f"Adjusting title: {title} by subtracting mean value: {mean_value:.4f}")
-            
-        im = ax.imshow(plot_data, aspect='auto', extent=extent, origin='lower', cmap='Reds')
-        ax.set_title(title, fontsize = 15)
-        ax.set_xlabel(f'$x [\\frac{{c}}{{\omega_{{pe}}}}]$')
-        ax.set_ylabel('$t [\\omega_{{pe}}^{{-1}}]$')
-        fig.colorbar(im, ax=ax)
-        
-    
-    plt.tight_layout()
-    plt.show()
-    # plt.savefig("XWave_Constraints.png")
-    
-# print("------Plotting Constraints as is--------------")
-# plot_constraints(constraints = constraints, titles = constraint_titles, extent=constraints_ext)
 
 
 # Helper functions for initialization of network parameters
@@ -493,26 +394,34 @@ class MLP(nn.Module):
         self.init = init 
         self.input_encoding = input_encoding #convert raw input data into suitable numerical representation for NN processing
         
-        self.sigma = sigma #enhance activation fns. Rather than tanh(x) -> tanh(sigma*x). Especially for high frequency stuff. 
+        #scaling factor for Fourier feature input encoding
+        self.sigma = sigma 
         self.encoded_size = hidden_size 
         
+        #input encoding: f(v) = [sin(2pi*B*v), cos(2pi*B*v)] where B is a matrix of random weights from N(0, sigma)
         if self.input_encoding:
             self.input_size = 2 * self.encoded_size #if input encoding is used, the input size is doubled
         
+        #B matrix contains random weights from a normal distribution scaled by "sigma" parameter
         self.B = np_to_tensor(np.random.normal(scale=self.sigma, size=(self.encoded_size, 2)), device=device, dtype=torch.float32, requires_grad=False)
+        # self.register_buffer('B', np_to_tensor(np.random.normal(scale=self.sigma, size=(self.encoded_size, 2)), device=device, dtype=torch.float32, requires_grad=False))
+
         
-        #now making the real MLP network
-        self.network = nn.Sequential() 
+        ###now making the real MLP network###
+        self.network = nn.Sequential() #Creation of sequential network
         
         self.network.add_module("input_linear", nn.Linear(self.input_size, self.hidden_size))
-        self.network.add_module("input_activation", self.activation_fn)
+        self.network.add_module("input_activation", self.activation_fn) #Using tanh for hidden layers. Have to take higher order derivatives for PINNs.
         
-        for i in range(num_hidden_layers):
+        for i in range(num_hidden_layers): #hidden layers which will be chosen by user
             self.network.add_module(f"hidden_layer_{i+1}", nn.Linear(self.hidden_size, self.hidden_size))
-            self.network.add_module(f"hidden_activation_{i+1}", self.activation_fn)
+            self.network.add_module(f"hidden_activation_{i+1}", self.activation_fn) #Using tanh for hidden layers. Have to take higher order derivatives for PINNs. 
             
-        self.network.add_module("output_layer", nn.Linear(self.hidden_size, self.output_size)) #single output for each input
+        self.network.add_module("output_layer", nn.Linear(self.hidden_size, self.output_size)) #Output Activation depends on the problem. 
+        #include output activation function because we are simulating wave dynamics. 
+        # self.network.add_module("output_activation", self.activation_fn) #Identity activation for output layer.
         
+        #Initialization of network weights
         if init is not None:
             if init == 'kaiming' or init == 'he': #Random initialization from a Gaussian distribution W -> N(0, sqrt(2/n)) n = number of inputs to the node
                 self.network = kaiming_init_weights(self.network)
@@ -673,11 +582,11 @@ def get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank):
     momentum_x_res = residuals[:, 5:6]
     momentum_x_res_copy = torch.abs(momentum_x_res.clone())
     momentum_x_res -= torch.mean(momentum_x_res_copy)  # Remove the mean value from the momentum_x residuals
-    momentum_y_res = residuals[:, 5:6]
+    momentum_y_res = residuals[:, 6:7]
     momentum_y_res_copy = torch.abs(momentum_y_res.clone())
     momentum_y_res -= torch.mean(momentum_y_res_copy) #remove the mean value from the momentum_y residuals
     
-    continuity_res = residuals[:, 6:7]
+    continuity_res = residuals[:, 7:8]
     
     gauge_loss = torch.mean(gauge_res**2)
     gauss_law_loss = torch.mean(gauss_law_res**2)
@@ -709,8 +618,10 @@ def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds,
     phi_sparse_preds = model(t_sparse, x_sparse)[:, 0:1]
     Bdot_sparse_preds = model(t_sparse, x_sparse)[:, 1:2]
     
+    
     phi_loss = torch.mean(torch.square(phi_sparse_preds - ((phi_sparse - means[:,0:1])/stds[:,0:1])))
     Bdot_loss = torch.mean(torch.square(Bdot_sparse_preds - ((Bdot_sparse - means[:,1:2])/stds[:,1:2])))
+    
     
     sm_loss = phi_loss + Bdot_loss
     
@@ -718,16 +629,19 @@ def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds,
 
 def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, rank, lamda=1.0):
     
-    physics_loss, gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
-    bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss = get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank)
+    # physics_loss, gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
+    # bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss = get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank)
     
     sm_loss = get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank)
     
-    loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
+    # loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
+    loss = sm_loss
     
-    return  loss, sm_loss, physics_loss, \
-            gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
-            bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss
+    # return  loss, sm_loss, physics_loss, \
+    #         gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
+    #         bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss
+            
+    return loss
 
 def write_loss(hist, loss, sm_loss, physics_loss, 
                gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss,
@@ -764,32 +678,35 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
     means_d = means.to(rank)
     stds_d = stds.to(rank)
     
-    for epoch in range(num_epochs):
+    for epoch in range(1, num_epochs+1):
         
         n_coll = t_coll.shape[0]
-        i_idxs = np.random.choice(n_coll, n_batches, replace=False) #indexes for the collocation points, randomly chosen for each batch
+        i_idxs = np.random.choice(n_coll, size = n_coll, replace=False) #indexes for the collocation points, randomly chosen for each batch
         
         for i in range(n_batches):
             
-            t_coll_batch = t_coll[i_idxs[i]:i_idxs[i]+1] #separate the collocation points into batches
-            x_coll_batch = x_coll[i_idxs[i]:i_idxs[i]+1]
+            t_coll_batch = t_coll[i_idxs[i::n_batches],:] #separate the collocation points into batches
+            x_coll_batch = x_coll[i_idxs[i::n_batches],:]
             
             optimizer.zero_grad() #clear the gradients of our optimizer 
             
-            loss, sm_loss, physics_loss, \
-            gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, bdot_curlA_loss, \
-            momentum_x_loss, momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
-                                                                        Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
-                                                                        rank, lamda=1.)
+            # loss, sm_loss, physics_loss, \
+            # gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, bdot_curlA_loss, \
+            # momentum_x_loss, momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
+            #                                                             Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
+            #                                                             rank, lamda=1.)
+            loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
+                                    Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
+                                    rank, lamda=1.)
             
             loss.backward() #calculate the gradients of the loss w.r.t. the model parameters. Backwards pass
             optimizer.step() #update the model parameters using the optimizer *magic*
             
             #update our loss history only for rank 0 
-            if rank == 0:
-                hist = write_loss(hist, loss, sm_loss, physics_loss,
-                                    gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss,
-                                    bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss)
+            # if rank == 0:
+            #     hist = write_loss(hist, loss, sm_loss, physics_loss,
+            #                         gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss,
+            #                         bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss)
             
             old_lr = get_lr(optimizer) #get the current learning rate
             scheduler.step(loss) #update the learning rate using the scheduler based on the loss
@@ -798,7 +715,9 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
                 print(f"LR has been set to {get_lr(optimizer):.4e}.")
             
         if rank == 0 and epoch % 50 == 0:
-            print(f"Epoch {epoch}/{num_epochs}, Total Loss: {loss.item():.4e}, SM Loss: {sm_loss.item():.4e}, Physics Loss: {physics_loss.item():.4e}")
+            # print(f"Epoch {epoch}/{num_epochs}, Total Loss: {loss.item():.4e}, SM Loss: {sm_loss.item():.4e}, Physics Loss: {physics_loss.item():.4e}")
+            print(f"Epoch {epoch}/{num_epochs}, Total Loss: {loss.item():.4e}")
+            
         
     return model, optimizer, hist
 
@@ -917,7 +836,7 @@ def run_ddp_training(rank, world_size, params):
 
     # Define Optimizer
     optimizer = optim.Adam(model.parameters(), lr=params['lr'])
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=200, min_lr=1e-8, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=500, min_lr=1e-8, verbose=True)
     
     hist = {
         'loss': [], 'sm_loss': [], 'physics_loss': [],
@@ -939,6 +858,9 @@ def run_ddp_training(rank, world_size, params):
         # Save state_dict for DDP model. Use model.module.state_dict() for actual model weights
         # because DDP wraps the original model.
         torch.save(model.module.state_dict(), "ddp_xwave_model.pt")
+        with open(f"ddp_xwave_model.pkl", "wb") as f:
+            pickle.dump(model.module, f)
+            
         # Save history
         with open(f"ddp_xwave_hist.pkl", "wb") as f:
             pickle.dump(hist, f)
@@ -961,14 +883,14 @@ def main():
     world_size = 2 # Number of GPUs to use (your 2 RTX 4070s)
 
     # Define common parameters for all processes
-    omega_list = [2.5] # Example values based on your notebook
+    omega_list = [1.5] # Example values based on your notebook
     phi_amp_list = [1.0]
     delta_list = [0.0]
 
     # Temporarily calculate k for lamda_wave and T_wave calculation
     # These global vars need to be set or params passed
     # It's better to pass them via `params` dict.
-    omega_ce = .01 # This is used by x_wave_dispersion
+    omega_ce = 2. # This is used by x_wave_dispersion
     
     # Calculate initial physical constants to define extent
     k_init = dispersion(omega_list[0], omega_ce)
@@ -980,8 +902,8 @@ def main():
 
     params = {
         'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
-        'num_hidden_layers': 3,
-        'hidden_size': 50,
+        'num_hidden_layers': 4,
+        'hidden_size': 256,
         'activation': 'tanh',
         'init': 'xavier',
         'input_encoding': True,
@@ -989,17 +911,17 @@ def main():
         'output_size': 7, # Number of outputs: phi, Bdot, Ax, Ay, Vx, Vy, N_e
 
         # Training parameters
-        'num_epochs': 200,
-        'n_batches': 50, # Number of collocation batches per epoch per GPU
-        'lr': 1e-3, 
-        'lamda': 1000.,
+        'num_epochs': 1000,
+        'n_batches': 64, # Number of collocation batches per epoch per GPU
+        'lr': 1e-4, 
+        'lamda': 1.,
 
         # Data generation parameters
-        'Nt': 2000,
-        'Nx': 2000,
+        'Nt': 200,
+        'Nx': 200,
         'Nt_coll': 200, # Total collocation points = Nt_coll * Nx_coll
         'Nx_coll': 200, 
-        'num_sparse_samples': 40000, #all of our collocation points
+        'num_sparse_samples': 200**2, #all of our collocation points
         'omega_list': omega_list,
         'omega_ce': [omega_ce],     # List to match expected input format
         'phi_amp_list': phi_amp_list,
