@@ -153,21 +153,18 @@ def analytical_solution(x, t, omega_ce, omega, k, phi_amp, delta):
     phase = 1j*(k*x - omega*t)
     factor = np.exp(phase)
     
-    phi = phi_amp * factor
+    phi = phi_amp * factor                          #perturbed electrostatic potential
     
-    # Electron density perturbation N = n_e - n_0
-    N = ((omega**2) - (k**2))*phi
     
-    # Perturbed electron velocities v1
-    vx = (omega/k)*((omega**2) - (k**2))*phi
-    vy = 1j*(1/B0)*(k*phi - omega*vx - omega*(omega/k)*phi)
+    N = ((omega**2) - (k**2))*phi                   #perturbed density
     
-    # Perturbed Vector Potential A1
-    A1x = (omega/k)*phi
-    A1y = -1j*(omega_ce/omega)*vx + vy
+    vx = (omega/k)*((omega**2) - (k**2))*phi        #x component perturbed velocity
+    A1x = (omega/k)*phi                             #x component perturbed vector potential
+    vy = 1j*(1/B0)*(k*phi + omega*vx - omega*A1x)   #y component perturbed velocity
     
-    # Time derivative of perturbed B field (from curl of A1)
-    Bdot = omega*k*A1y
+    A1y = (1/(omega**2 - k**2))*vy                  # Perturbed Vector Potential A1
+    
+    Bdot = omega*k*A1y                               #time derivative of perturbed magnetic field      
     
     #Background field B0 is constant.
     B0_value = np.full_like(Bdot, B0, dtype=np.complex128)
@@ -580,11 +577,11 @@ def get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank):
     ampere_y_res = residuals[:, 3:4]
     bdot_curlA_res = residuals[:, 4:5]
     momentum_x_res = residuals[:, 5:6]
-    momentum_x_res_copy = torch.abs(momentum_x_res.clone())
-    momentum_x_res -= torch.mean(momentum_x_res_copy)  # Remove the mean value from the momentum_x residuals
+    # momentum_x_res_copy = torch.abs(momentum_x_res.clone())
+    # momentum_x_res -= torch.mean(momentum_x_res_copy)  # Remove the mean value from the momentum_x residuals
     momentum_y_res = residuals[:, 6:7]
-    momentum_y_res_copy = torch.abs(momentum_y_res.clone())
-    momentum_y_res -= torch.mean(momentum_y_res_copy) #remove the mean value from the momentum_y residuals
+    # momentum_y_res_copy = torch.abs(momentum_y_res.clone())
+    # momentum_y_res -= torch.mean(momentum_y_res_copy) #remove the mean value from the momentum_y residuals
     
     continuity_res = residuals[:, 7:8]
     
@@ -629,19 +626,18 @@ def get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds,
 
 def get_total_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, rank, lamda=1.0):
     
-    # physics_loss, gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
-    # bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss = get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank)
+    physics_loss, gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
+    bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss = get_physics_loss(model, t_coll, x_coll, B0_amp, means, stds, rank)
     
     sm_loss = get_sm_loss(model, t_sparse, x_sparse, phi_sparse, Bdot_sparse, means, stds, rank)
     
-    # loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
-    loss = sm_loss
+    loss = sm_loss + lamda*physics_loss #lamda is the weighting factor for the physics loss (default = 1.0)
     
-    # return  loss, sm_loss, physics_loss, \
-    #         gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
-    #         bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss
+    
+    return  loss, sm_loss, physics_loss, \
+            gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, \
+            bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss
             
-    return loss
 
 def write_loss(hist, loss, sm_loss, physics_loss, 
                gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss,
@@ -690,23 +686,21 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
             
             optimizer.zero_grad() #clear the gradients of our optimizer 
             
-            # loss, sm_loss, physics_loss, \
-            # gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, bdot_curlA_loss, \
-            # momentum_x_loss, momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
-            #                                                             Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
-            #                                                             rank, lamda=1.)
-            loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
-                                    Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
-                                    rank, lamda=1.)
+            loss, sm_loss, physics_loss, \
+            gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss, bdot_curlA_loss, \
+            momentum_x_loss, momentum_y_loss, continuity_loss = get_total_loss(model, t_sparse, x_sparse, phi_sparse, 
+                                                                        Bdot_sparse, t_coll, x_coll, B0_amp, means, stds, 
+                                                                        rank, lamda=1.)
+            
             
             loss.backward() #calculate the gradients of the loss w.r.t. the model parameters. Backwards pass
             optimizer.step() #update the model parameters using the optimizer *magic*
             
             #update our loss history only for rank 0 
-            # if rank == 0:
-            #     hist = write_loss(hist, loss, sm_loss, physics_loss,
-            #                         gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss,
-            #                         bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss)
+            if rank == 0:
+                hist = write_loss(hist, loss, sm_loss, physics_loss,
+                                    gauge_loss, gauss_law_loss, ampere_x_loss, ampere_y_loss,
+                                    bdot_curlA_loss, momentum_x_loss, momentum_y_loss, continuity_loss)
             
             old_lr = get_lr(optimizer) #get the current learning rate
             scheduler.step(loss) #update the learning rate using the scheduler based on the loss
@@ -817,6 +811,9 @@ def run_ddp_training(rank, world_size, params):
     data_flat_GT = np.array([phi_flat_np, Bdot_flat_np, Ax_flat_np, Ay_flat_np, Vx_flat_np, Vy_flat_np, N_flat_np])
     means = np_to_tensor(np.mean(data_flat_GT, axis=1), reshape=True, dims=(1,7), device=rank)
     stds = np_to_tensor(np.std(data_flat_GT, axis=1) + 1e-8, reshape=True, dims=(1,7), device=rank) #epsilon to prevent division by zero. 
+    with open('ddp_xwave_means_stds.pkl', 'wb') as f:
+        pickle.dump({'means': means.cpu(), 'stds': stds.cpu()}, f)
+    print("Means and Stds saved to ddp_xwave_means_stds.pkl")
     
     # Initialize Model for this process
     model = MLP(
@@ -857,7 +854,7 @@ def run_ddp_training(rank, world_size, params):
         print("\nTraining complete. Saving model and history...")
         # Save state_dict for DDP model. Use model.module.state_dict() for actual model weights
         # because DDP wraps the original model.
-        torch.save(model.module.state_dict(), "ddp_xwave_model.pt")
+        # torch.save(model.module.state_dict(), "ddp_xwave_model.pt")
         with open(f"ddp_xwave_model.pkl", "wb") as f:
             pickle.dump(model.module, f)
             
@@ -880,10 +877,10 @@ def main():
     os.environ['MASTER_ADDR'] = 'localhost'
     os.environ['MASTER_PORT'] = '12355'     
 
-    world_size = 2 # Number of GPUs to use (your 2 RTX 4070s)
+    world_size = 2 # Number of GPUs to use (2 RTX 4070s)
 
     # Define common parameters for all processes
-    omega_list = [1.5] # Example values based on your notebook
+    omega_list = [1.5] # Between ~0.42 and 2.23 for omega_ce = 2 to have wave propagation
     phi_amp_list = [1.0]
     delta_list = [0.0]
 
@@ -903,7 +900,7 @@ def main():
     params = {
         'extent': np.array([tmin_init, tmax_init, xmin_init, xmax_init]), 
         'num_hidden_layers': 4,
-        'hidden_size': 256,
+        'hidden_size': 50,
         'activation': 'tanh',
         'init': 'xavier',
         'input_encoding': True,
@@ -917,11 +914,11 @@ def main():
         'lamda': 1.,
 
         # Data generation parameters
-        'Nt': 200,
-        'Nx': 200,
+        'Nt': 2000,
+        'Nx': 2000,
         'Nt_coll': 200, # Total collocation points = Nt_coll * Nx_coll
         'Nx_coll': 200, 
-        'num_sparse_samples': 200**2, #all of our collocation points
+        'num_sparse_samples': int((200**2)*.05), #all of our collocation points
         'omega_list': omega_list,
         'omega_ce': [omega_ce],     # List to match expected input format
         'phi_amp_list': phi_amp_list,
