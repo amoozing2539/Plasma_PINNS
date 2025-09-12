@@ -709,8 +709,8 @@ def optimize(model, optimizer, scheduler, hist, num_epochs, n_batches,
                 print(f"LR has been set to {get_lr(optimizer):.4e}.")
             
         if rank == 0 and epoch % 50 == 0:
-            # print(f"Epoch {epoch}/{num_epochs}, Total Loss: {loss.item():.4e}, SM Loss: {sm_loss.item():.4e}, Physics Loss: {physics_loss.item():.4e}")
-            print(f"Epoch {epoch}/{num_epochs}, Total Loss: {loss.item():.4e}")
+            print(f"Epoch {epoch}/{num_epochs}, Total Loss: {loss.item():.4e}, SM Loss: {sm_loss.item():.4e}, Physics Loss: {physics_loss.item():.4e}")
+            # print(f"Epoch {epoch}/{num_epochs}, Total Loss: {loss.item():.4e}")
             
         
     return model, optimizer, hist

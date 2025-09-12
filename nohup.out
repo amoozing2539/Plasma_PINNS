@@ -1,0 +1,96 @@
+/home/aleotz/.conda/envs/pinn_recon/lib/python3.12/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+/home/aleotz/.conda/envs/pinn_recon/lib/python3.12/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+-----Training Model----------
+Means and Stds saved to ddp_xwave_means_stds.pkl
+Initializing NN with glorot initialization...
+
+
+
+MLP tmin: 0.0000, MLP tmax: 12.5664, MLP xmin: 0.0000, MLP xmax: 11.4618
+
+Number of hidden layers: 4
+Hidden layer size: 50 nodes / layer
+Input size: 100
+Output size: 7
+
+Activation function used: Tanh()
+NN parameter initialization mode used: xavier
+Use Fourier feature input encoding? True
+Sigma of Fourier feature input encoding = 1.0
+
+
+Network architecture: Sequential(
+  (input_linear): Linear(in_features=100, out_features=50, bias=True)
+  (input_activation): Tanh()
+  (hidden_layer_1): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_1): Tanh()
+  (hidden_layer_2): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_2): Tanh()
+  (hidden_layer_3): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_3): Tanh()
+  (hidden_layer_4): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_4): Tanh()
+  (output_layer): Linear(in_features=50, out_features=7, bias=True)
+)
+
+
+LR has been set to 5.0000e-05.
+-----Training Model----------
+Means and Stds saved to ddp_xwave_means_stds.pkl
+Initializing NN with glorot initialization...
+
+
+
+MLP tmin: 0.0000, MLP tmax: 12.5664, MLP xmin: 0.0000, MLP xmax: 11.4618
+
+Number of hidden layers: 4
+Hidden layer size: 50 nodes / layer
+Input size: 100
+Output size: 7
+
+Activation function used: Tanh()
+NN parameter initialization mode used: xavier
+Use Fourier feature input encoding? True
+Sigma of Fourier feature input encoding = 1.0
+
+
+Network architecture: Sequential(
+  (input_linear): Linear(in_features=100, out_features=50, bias=True)
+  (input_activation): Tanh()
+  (hidden_layer_1): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_1): Tanh()
+  (hidden_layer_2): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_2): Tanh()
+  (hidden_layer_3): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_3): Tanh()
+  (hidden_layer_4): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_4): Tanh()
+  (output_layer): Linear(in_features=50, out_features=7, bias=True)
+)
+
+
+Epoch 50/1000, Total Loss: 2.4990e-02
+Epoch 100/1000, Total Loss: 1.8526e-03
+Epoch 150/1000, Total Loss: 6.0183e-04
+Epoch 200/1000, Total Loss: 3.3842e-04
+Epoch 250/1000, Total Loss: 2.5318e-04
+Epoch 300/1000, Total Loss: 1.9349e-04
+Epoch 350/1000, Total Loss: 2.0429e-04
+Epoch 400/1000, Total Loss: 1.2479e-04
+Epoch 450/1000, Total Loss: 1.4467e-04
+Epoch 500/1000, Total Loss: 9.7963e-05
+Epoch 550/1000, Total Loss: 1.1917e-04
+Epoch 600/1000, Total Loss: 1.0353e-04
+Epoch 650/1000, Total Loss: 1.5049e-04
+LR has been set to 5.0000e-05.
+Epoch 700/1000, Total Loss: 6.8901e-05
+Epoch 750/1000, Total Loss: 6.6661e-05
+Epoch 800/1000, Total Loss: 6.2323e-05
+Epoch 850/1000, Total Loss: 5.8471e-05
+Epoch 900/1000, Total Loss: 7.2607e-05
+Epoch 950/1000, Total Loss: 6.0458e-05
+Epoch 1000/1000, Total Loss: 5.0286e-05
+
+Training complete. Saving model and history...
