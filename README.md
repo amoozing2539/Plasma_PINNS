@@ -1,2 +1,2 @@
 # Plasma_PINNS
- Attempts on reconstructing E&B fields in different plasma systems.
+ Attempts on reconstructing EM fields with sparse measurements in a variety of plasma wave modes.
