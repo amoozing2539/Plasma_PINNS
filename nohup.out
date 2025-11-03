@@ -94,3 +94,99 @@ Epoch 950/1000, Total Loss: 6.0458e-05
 Epoch 1000/1000, Total Loss: 5.0286e-05
 
 Training complete. Saving model and history...
+/home/aleotz/.conda/envs/pinn_recon/lib/python3.12/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+/home/aleotz/.conda/envs/pinn_recon/lib/python3.12/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+-----Training Model----------
+Means and Stds saved to ddp_xwave_means_stds.pkl
+Initializing NN with glorot initialization...
+
+
+
+MLP tmin: 0.0000, MLP tmax: 12.5664, MLP xmin: 0.0000, MLP xmax: 11.4618
+
+Number of hidden layers: 4
+Hidden layer size: 50 nodes / layer
+Input size: 100
+Output size: 7
+
+Activation function used: Tanh()
+NN parameter initialization mode used: xavier
+Use Fourier feature input encoding? True
+Sigma of Fourier feature input encoding = 1.0
+
+
+Network architecture: Sequential(
+  (input_linear): Linear(in_features=100, out_features=50, bias=True)
+  (input_activation): Tanh()
+  (hidden_layer_1): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_1): Tanh()
+  (hidden_layer_2): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_2): Tanh()
+  (hidden_layer_3): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_3): Tanh()
+  (hidden_layer_4): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_4): Tanh()
+  (output_layer): Linear(in_features=50, out_features=7, bias=True)
+)
+
+
+LR has been set to 5.0000e-05.
+-----Training Model----------
+Means and Stds saved to ddp_xwave_means_stds.pkl
+Initializing NN with glorot initialization...
+
+
+
+MLP tmin: 0.0000, MLP tmax: 12.5664, MLP xmin: 0.0000, MLP xmax: 11.4618
+
+Number of hidden layers: 4
+Hidden layer size: 50 nodes / layer
+Input size: 100
+Output size: 7
+
+Activation function used: Tanh()
+NN parameter initialization mode used: xavier
+Use Fourier feature input encoding? True
+Sigma of Fourier feature input encoding = 1.0
+
+
+Network architecture: Sequential(
+  (input_linear): Linear(in_features=100, out_features=50, bias=True)
+  (input_activation): Tanh()
+  (hidden_layer_1): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_1): Tanh()
+  (hidden_layer_2): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_2): Tanh()
+  (hidden_layer_3): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_3): Tanh()
+  (hidden_layer_4): Linear(in_features=50, out_features=50, bias=True)
+  (hidden_activation_4): Tanh()
+  (output_layer): Linear(in_features=50, out_features=7, bias=True)
+)
+
+
+Epoch 50/1000, Total Loss: 1.1507e-02, SM Loss: 8.4211e-04, Physics Loss: 1.0664e-02
+Epoch 100/1000, Total Loss: 1.2639e-03, SM Loss: 4.9146e-05, Physics Loss: 1.2148e-03
+Epoch 150/1000, Total Loss: 4.7470e-04, SM Loss: 1.2749e-05, Physics Loss: 4.6195e-04
+Epoch 200/1000, Total Loss: 2.7686e-04, SM Loss: 6.0491e-06, Physics Loss: 2.7081e-04
+Epoch 250/1000, Total Loss: 1.9757e-04, SM Loss: 4.1869e-06, Physics Loss: 1.9338e-04
+Epoch 300/1000, Total Loss: 1.5443e-04, SM Loss: 3.0825e-06, Physics Loss: 1.5135e-04
+Epoch 350/1000, Total Loss: 1.3194e-04, SM Loss: 4.8261e-06, Physics Loss: 1.2712e-04
+Epoch 400/1000, Total Loss: 1.1268e-04, SM Loss: 3.1264e-06, Physics Loss: 1.0955e-04
+Epoch 450/1000, Total Loss: 9.5564e-05, SM Loss: 1.5305e-06, Physics Loss: 9.4034e-05
+Epoch 500/1000, Total Loss: 8.4853e-05, SM Loss: 1.1920e-06, Physics Loss: 8.3661e-05
+Epoch 550/1000, Total Loss: 7.6791e-05, SM Loss: 1.1262e-06, Physics Loss: 7.5665e-05
+Epoch 600/1000, Total Loss: 7.1768e-05, SM Loss: 1.7448e-06, Physics Loss: 7.0023e-05
+Epoch 650/1000, Total Loss: 6.4889e-05, SM Loss: 9.9585e-07, Physics Loss: 6.3893e-05
+Epoch 700/1000, Total Loss: 8.3426e-05, SM Loss: 1.2672e-05, Physics Loss: 7.0754e-05
+Epoch 750/1000, Total Loss: 1.2180e-04, SM Loss: 3.4415e-05, Physics Loss: 8.7388e-05
+Epoch 800/1000, Total Loss: 5.2441e-05, SM Loss: 1.0358e-06, Physics Loss: 5.1405e-05
+LR has been set to 5.0000e-05.
+Epoch 850/1000, Total Loss: 4.9048e-05, SM Loss: 6.7536e-07, Physics Loss: 4.8373e-05
+Epoch 900/1000, Total Loss: 4.7408e-05, SM Loss: 1.2766e-06, Physics Loss: 4.6131e-05
+Epoch 950/1000, Total Loss: 5.7835e-05, SM Loss: 5.2678e-06, Physics Loss: 5.2567e-05
+Epoch 1000/1000, Total Loss: 4.1849e-05, SM Loss: 6.2157e-07, Physics Loss: 4.1227e-05
+
+Training complete. Saving model and history...

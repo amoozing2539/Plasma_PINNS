@@ -918,7 +918,7 @@ def main():
         'Nx': 2000,
         'Nt_coll': 200, # Total collocation points = Nt_coll * Nx_coll
         'Nx_coll': 200, 
-        'num_sparse_samples': int((200**2)*.05), #all of our collocation points
+        'num_sparse_samples': int(200), #all of our collocation points
         'omega_list': omega_list,
         'omega_ce': [omega_ce],     # List to match expected input format
         'phi_amp_list': phi_amp_list,
