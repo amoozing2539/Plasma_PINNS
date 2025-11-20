@@ -1,6 +1,7 @@
 from scipy.interpolate import griddata
 import numpy as np
 from matplotlib import colors
+import scipy
 
 def get_LAPD_domain(spatial_coords):
     x = np.unique(spatial_coords['X'].flatten())
@@ -9,11 +10,22 @@ def get_LAPD_domain(spatial_coords):
 
     return x, y, z
 
-def gen_3D_Bvec(time_index, Bvec, x, y, z, M):
+def gen_3D_Bvec(time_index, Bvec, x, y, z, M, low_pass, sigma):
     # stacks all z slices for each B component at time_index
-    Bx_3d = np.stack([Bvec[time_index][z_ind]['DATA_X'] for z_ind in range(len(z))], axis=2)
-    By_3d = np.stack([Bvec[time_index][z_ind]['DATA_Y'] for z_ind in range(len(z))], axis=2)
-    Bz_3d = np.stack([Bvec[time_index][z_ind]['DATA_Z'] for z_ind in range(len(z))], axis=2)
+
+    Bx_list = []
+    By_list = []
+    Bz_list = []
+
+    for z_ind in range(len(z)):
+        Bx_slice, By_slice, Bz_slice = B_true_slice(Bvec, z_ind, time_index, low_pass=low_pass, sigma=sigma)
+        Bx_list.append(Bx_slice)
+        By_list.append(By_slice)
+        Bz_list.append(Bz_slice)
+
+    Bx_3d = np.stack(Bx_list, axis=2)
+    By_3d = np.stack(By_list, axis=2)
+    Bz_3d = np.stack(Bz_list, axis=2)
 
     return Bx_3d, By_3d, Bz_3d
 
@@ -62,10 +74,15 @@ def get_color_norm(F_true, F_pred):
     F_color_norm = colors.Normalize(vmin=np.nanmin(F_true_masked), vmax=np.nanmax(F_true_masked))
     return F_true_masked, F_color_norm
 
-def B_true_slice(Bvec, z_slice, t_index):
+def B_true_slice(Bvec, z_slice, t_index, low_pass, sigma):
     # returns "true" components at given z_slice and t_index
     Bx_true = Bvec[t_index][z_slice]["DATA_X"]
     By_true = Bvec[t_index][z_slice]["DATA_Y"]
     Bz_true = Bvec[t_index][z_slice]["DATA_Z"]
+
+    if low_pass:
+        Bx_true = scipy.ndimage.gaussian_filter(Bx_true, sigma=sigma)
+        By_true = scipy.ndimage.gaussian_filter(By_true, sigma=sigma)
+        Bz_true = scipy.ndimage.gaussian_filter(Bz_true, sigma=sigma)
 
     return Bx_true, By_true, Bz_true
