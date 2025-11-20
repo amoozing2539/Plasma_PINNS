@@ -48,7 +48,9 @@ def check_ffmpeg():
                                text=True)
         
         if result.returncode == 0:
-            print(f"FFmpeg is available: {result.stdout.split('\\n')[0]}")
+            line = result.stdout.split('\n')[0]
+            print(f"FFmpeg is available: {line}")
+            #print(f"FFmpeg is available: {result.stdout.split('\\n')[0]}")
             return True
         else:
             print("FFmpeg is installed but returned an error.")
@@ -577,9 +579,12 @@ def try_ffmpeg_mp4(frame_files, output_filename, fps=10):
 
 def main():
     """Main function to create animations from HDF5 data."""
+    # Path
+    path = '/home/stsoukalas/shared/data/LAPD_ALfven_2025-02/'
+    
     # File paths
-    b_field_file = "b37-40.hdf5"
-    e_field_file = "e37-40.hdf5"
+    b_field_file = f"{path}b37-40.hdf5"
+    e_field_file = f"{path}e37-40.hdf5"
     
     # Check if the files exist
     if not os.path.exists(b_field_file):
