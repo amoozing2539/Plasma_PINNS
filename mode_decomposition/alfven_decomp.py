@@ -2,6 +2,9 @@ from scipy.interpolate import griddata
 import numpy as np
 from matplotlib import colors
 import scipy
+import h5py
+from gabi_decomp import *
+
 
 def get_LAPD_domain(spatial_coords):
     x = np.unique(spatial_coords['X'].flatten())
@@ -86,3 +89,141 @@ def B_true_slice(Bvec, z_slice, t_index, low_pass, sigma):
         Bz_true = scipy.ndimage.gaussian_filter(Bz_true, sigma=sigma)
 
     return Bx_true, By_true, Bz_true
+
+
+if __name__ == '__main__':
+    # BASIC PARAMS
+    filename = '/home/stsoukalas/shared/data/LAPD_ALfven_2025-02/b37-40.hdf5'
+
+
+    f_raw = h5py.File(filename, 'r')
+    Bvec = f_raw['B vectors/Bvec']
+    times = f_raw['B amplitudes/Timesteps']
+    spatial_coords = f_raw['Spatial grid']
+
+    M = 10
+    x, y, z = get_LAPD_domain(spatial_coords)
+    X, Y = np.meshgrid(x, y, indexing='xy')
+    
+    Nx = len(x)
+    Ny = len(y)
+    Nt = len(times)
+    Nz = len(z)
+    nphi = 256
+    phi = gen_phi(nphi)
+    # write metadata
+    with h5py.File("mode_profiles.hdf5", "w") as f:
+
+        f.create_dataset('coords/t', data=times)
+        f.create_dataset("coords/x", data=x)
+        f.create_dataset("coords/y", data=y)
+        f.create_dataset("coords/z", data=z)
+
+        # placeholder for r_vals (will resize in a moment bc Nr is not known until interpolation)
+        f.create_dataset("coords/r_vals", shape=(0,), maxshape=(None,), dtype="f8")
+
+        # f.create_dataset('rec_coords/x_rec', shape=(0,), maxshape=(None,), dtype="f8")
+        # f.create_dataset('rec_coords/y_rec', shape=(0,), maxshape=(None,), dtype="f8")
+        
+        # f.create_dataset('rec_coords/x', shape=(0,), maxshape=(None,), dtype="f8")
+
+    # get Nr on t=0
+    Bx_3d, By_3d, Bz_3d = gen_3D_Bvec(
+        time_index=0, Bvec=Bvec,
+        x=x, y=y, z=z, M=M, low_pass=False, sigma=0
+    )
+
+    r_vals, Br0, Bp0, Bz0 = make_modes_interp(
+        Bx_3d, By_3d, Bz_3d,
+        x, y, z, modes=M
+    )
+
+    X_rec, Y_rec = get_rec_cartesian_domain(r_vals, phi)
+
+    Nr = len(r_vals)
+    Nm = 2*M + 1
+    # Nx_rec = len(X_rec.ravel())
+    # Ny_rec = len(Y_rec.ravel())
+
+    # -----------------------------------------------
+    #   3. Create the mode datasets NOW that Nr is known
+    # -----------------------------------------------
+    with h5py.File("mode_profiles.hdf5", "r+") as f:
+
+        # store r-values
+        f["coords/r_vals"].resize((Nr,))
+        f["coords/r_vals"][...] = r_vals
+
+        # f['rec_coords/x_rec'].resize((Nx_rec,))
+        # f['rec_coords/y_rec'].resize((Ny_rec,))
+
+        # f['rec_coords/x_rec'][...] = X_rec
+        # f['rec_coords/y_rec'][...] = Y_rec
+
+        # Create datasets: (Nt, Nz, Nr, Nmodes)
+        f.create_dataset("modes/Br", shape=(Nt, Nz, Nr, Nm), dtype="f4")
+        f.create_dataset("modes/Bp", shape=(Nt, Nz, Nr, Nm), dtype="f4")
+        f.create_dataset("modes/Bz", shape=(Nt, Nz, Nr, Nm), dtype="f4")
+
+        f.create_dataset('rec_raw/Br', shape=(Nt, Nz, Nr, nphi, Nm), dtype="f4")
+        f.create_dataset('rec_raw/Bp', shape=(Nt, Nz, Nr, nphi, Nm), dtype="f4")
+        f.create_dataset('rec_raw/Bz', shape=(Nt, Nz, Nr, nphi, Nm), dtype="f4")
+
+        f.create_dataset('rec_interp/Br', shape=(Nt, Nz, Nx, Ny, Nm), dtype="f4")
+        f.create_dataset('rec_interp/Bp', shape=(Nt, Nz, Nx, Ny, Nm), dtype="f4")
+        f.create_dataset('rec_interp/Bz', shape=(Nt, Nz, Nx, Ny, Nm), dtype="f4")
+
+        dBr = f["modes/Br"]
+        dBp = f["modes/Bp"]
+        dBz = f["modes/Bz"]
+
+        # save first timestep
+        dBr[0] = Br0
+        dBp[0] = Bp0
+        dBz[0] = Bz0
+
+        for m in range(M+1):
+            Br_rec0, Bp_rec0, Bz_rec0 = reconstruct_modes(Br0, Bp0, Bz0, phi, m)
+            f["rec_raw/Br"][0][:,:,:,m] = Br_rec0
+            f["rec_raw/Bp"][0][:,:,:,m] = Bp_rec0
+            f["rec_raw/Bz"][0][:,:,:,m] = Bz_rec0
+
+        # -----------------------------------------------
+        #   4. Loop remaining timesteps normally
+        # -----------------------------------------------
+        for it in range(1, Nt):
+            Bx_3d, By_3d, Bz_3d = gen_3D_Bvec(
+                time_index=it, Bvec=Bvec,
+                x=x, y=y, z=z, M=M, low_pass=False, sigma=0
+            )
+
+            r_vals, Br, Bp, Bz = make_modes_interp(
+                Bx_3d, By_3d, Bz_3d,
+                x, y, z, modes=M
+            )
+
+            assert Br.shape == (Nz, Nr, nphi) # sanity check
+
+            dBr[it] = Br
+            dBp[it] = Bp
+            dBz[it] = Bz
+
+            for m in range(M+1):
+                Br_rec, Bp_rec, Bz_rec = reconstruct_modes(Br, Bp, Bz, phi, m)
+                f["rec_raw/Br"][it][:,:,:,m] = Br_rec
+                f["rec_raw/Bp"][it][:,:,:,m] = Bp_rec
+                f["rec_raw/Bz"][it][:,:,:,m] = Bz_rec
+
+                for z_slice, _ in enumerate(z):
+                    Br_interp = pred_interp(X_rec, Y_rec, X, Y, Br_rec[z_slice])
+                    Bp_interp = pred_interp(X_rec, Y_rec, X, Y, Bp_rec[z_slice])
+                    Bz_interp = pred_interp(X_rec, Y_rec, X, Y, Bz_rec[z_slice])
+
+                    f['rec_interp/Br'][it][z_slice,:,:,m] = Br_interp
+                    f['rec_interp/Bp'][it][z_slice,:,:,m] = Bp_interp
+                    f['rec_interp/Bz'][it][z_slice,:,:,m] = Bz_interp
+
+        # optional metadata
+        f.attrs["n_modes"] = M
+        f.attrs["n_timesteps"] = Nt
+        f.attrs["description"] = "Mode decomposition profiles over z slices and timesteps"
