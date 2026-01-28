@@ -4,3 +4,6 @@ __pycache__/
 MS/
 *.png
 __MACOSX/
+.vscode
+plots/
+mode_decomp_figs/
