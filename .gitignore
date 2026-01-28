@@ -7,3 +7,5 @@ __MACOSX/
 .vscode
 plots/
 mode_decomp_figs/
+*.pkl
+pkl_data/
