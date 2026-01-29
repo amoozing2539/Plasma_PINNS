@@ -4,14 +4,8 @@ __pycache__/
 MS/
 *.png
 __MACOSX/
-# Data files
+.vscode
+plots/
+mode_decomp_figs/
 *.pkl
-
-# Output files
-nohup.out
-
-# Specific Python files
-alfven_data_movies.py
-alfven_data_streamline.py
-alfven_data_visualized.py
-alfven_movies_2.py
+pkl_data/
